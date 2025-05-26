@@ -1,0 +1,37 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ✅ Only allow authenticated users to access their own user document
+    match /users/{userId} {
+      allow read, write: if request.auth != null && request.auth.uid == userId;
+    }
+
+    // ✅ Allow authenticated users to read tokenPurchases where userId matches their UID
+    match /tokenPurchases/{documentId} {
+      allow read: if request.auth != null && resource.data.userId == request.auth.uid;
+      // Allow writes only from the server (e.g., Cloud Functions) with validation
+      allow write: if request.auth != null && request.auth.uid != null && request.resource.data.userId == request.auth.uid;
+    }
+
+    // ✅ Allow authenticated users to read redemptions where userId matches their UID
+    match /redemptions/{documentId} {
+      allow read: if request.auth != null && resource.data.userId == request.auth.uid;
+      // Allow writes only from the server (e.g., Cloud Functions) with validation
+      allow write: if request.auth != null && request.auth.uid != null && request.resource.data.userId == request.auth.uid;
+    }
+
+    // ✅ Allow authenticated users to read trades where senderId or receiverId matches their UID
+    match /trades/{documentId} {
+      allow read: if request.auth != null && (resource.data.senderId == request.auth.uid || resource.data.receiverId == request.auth.uid);
+      // Allow writes only from the server (e.g., Cloud Functions) with validation
+      allow write: if request.auth != null && request.auth.uid != null && (request.resource.data.senderId == request.auth.uid || request.resource.data.receiverId == request.auth.uid);
+    }
+
+    // ❌ Everything else remains locked down
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

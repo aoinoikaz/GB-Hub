@@ -13,7 +13,7 @@ if (!admin.apps.length) {
 }
 
 // Initialize secrets
-let secrets: {
+let secretsConfig: {
   EMBY_API_KEY: string;
   PAYPAL_CLIENT_ID: string;
   PAYPAL_SECRET: string;
@@ -24,49 +24,14 @@ let secrets: {
 } | null = null;
 
 async function getSecretsConfig() {
-  if (!secrets) {
-    secrets = await getAllSecrets();
+  if (!secretsConfig) {
+    secretsConfig = await getAllSecrets();
   }
-  return secrets;
+  return secretsConfig;
 }
-
-// These will be populated from secrets
-let EMBY_API_KEY: string = "";
-let PAYPAL_CLIENT_ID: string = "";
-let PAYPAL_SECRET: string = "";
-let PAYPAL_API_BASE: string = "";
-let PAYPAL_CLIENT_ID_SANDBOX: string = "";
-let PAYPAL_SECRET_SANDBOX: string = "";
-let PAYPAL_API_BASE_SANDBOX: string = "";
 
 // Determine if we're in sandbox mode (you can set this via environment variable)
 const IS_PAYPAL_SANDBOX = process.env.PAYPAL_SANDBOX === 'true';
-
-// Initialize secrets on cold start
-(async () => {
-  try {
-    const config = await getSecretsConfig();
-    EMBY_API_KEY = config.EMBY_API_KEY;
-    
-    // Set PayPal credentials based on environment
-    if (IS_PAYPAL_SANDBOX) {
-      PAYPAL_CLIENT_ID = config.PAYPAL_CLIENT_ID_SANDBOX;
-      PAYPAL_SECRET = config.PAYPAL_SECRET_SANDBOX;
-      PAYPAL_API_BASE = config.PAYPAL_API_BASE_SANDBOX;
-      console.log('Using PayPal SANDBOX credentials');
-    } else {
-      PAYPAL_CLIENT_ID = config.PAYPAL_CLIENT_ID;
-      PAYPAL_SECRET = config.PAYPAL_SECRET;
-      PAYPAL_API_BASE = config.PAYPAL_API_BASE;
-      console.log('Using PayPal PRODUCTION credentials');
-    }
-    
-    console.log('Secrets loaded successfully');
-  } catch (error) {
-    console.error('Failed to load secrets:', error);
-  }
-})();
-
 
 const EMBY_BASE_URL: string = "https://media.gondolabros.com";
 const BUCKET = admin.storage().bucket();
@@ -87,6 +52,7 @@ const VALID_MAGIC_BYTES: { [key: string]: number[] } = {
   "image/bmp": [0x42, 0x4d],
 };
 
+// Interface definitions
 interface UploadProfileImageData {
   fileName: string;
   contentType: string;
@@ -98,7 +64,6 @@ interface SetupUserAccountData {
   username: string;
   password: string;
 }
-
 
 interface CheckUsernameData {
   username: string;
@@ -146,7 +111,6 @@ interface CreatePaypalOrderData {
 interface CreatePaypalOrderResponse {
   orderId: string;
 }
-
 
 interface CreateTipOrderData {
   userId: string;
@@ -218,21 +182,21 @@ interface ServiceHandler {
   verifyUserExists(serviceUserId: string): Promise<boolean>;
 }
 
-// Service Configs
-const SERVICES = {
-  emby: {
-    apiKey: EMBY_API_KEY,
-    url: EMBY_BASE_URL,
-  },
-};
-
 class EmbyService implements ServiceHandler {
-  private apiKey: string;
+  private apiKey: string = "";
   private url: string;
+  private initialized: boolean = false;
 
-  constructor(config: { apiKey: string; url: string }) {
-    this.apiKey = config.apiKey;
-    this.url = config.url;
+  constructor(url: string) {
+    this.url = url;
+  }
+
+  private async ensureInitialized() {
+    if (!this.initialized) {
+      const secrets = await getSecretsConfig();
+      this.apiKey = secrets.EMBY_API_KEY;
+      this.initialized = true;
+    }
   }
 
   private getUserPolicy(isDisabled: boolean, streamLimit: number): any {
@@ -270,6 +234,8 @@ class EmbyService implements ServiceHandler {
   }
 
   async createUser(email: string, username: string, normalizedUsername: string, password: string): Promise<string> {
+    await this.ensureInitialized();
+    
     console.log(`Creating Emby user with normalizedUsername: ${normalizedUsername}, email: ${email}`);
     const createUserResponse = await fetch(`${this.url}/Users/New`, {
       method: "POST",
@@ -328,6 +294,8 @@ class EmbyService implements ServiceHandler {
   }
 
   async enableUser(userId: string): Promise<void> {
+    await this.ensureInitialized();
+    
     const updateResponse = await fetch(`${this.url}/Users/${userId}/Policy`, {
       method: "POST",
       headers: {
@@ -344,6 +312,8 @@ class EmbyService implements ServiceHandler {
   }
 
   async disableUser(userId: string): Promise<void> {
+    await this.ensureInitialized();
+    
     const policyResponse = await fetch(`${this.url}/Users/${userId}/Policy`, {
       method: "POST",
       headers: {
@@ -359,6 +329,8 @@ class EmbyService implements ServiceHandler {
   }
 
   async updatePassword(normalizedUsername: string, newPassword: string): Promise<void> {
+    await this.ensureInitialized();
+    
     const response = await fetch(`${this.url}/Users`, {
       headers: { "X-Emby-Token": this.apiKey },
     });
@@ -381,6 +353,8 @@ class EmbyService implements ServiceHandler {
   }
 
   async verifyUserExists(serviceUserId: string): Promise<boolean> {
+    await this.ensureInitialized();
+    
     console.log(`Verifying user with serviceUserId ${serviceUserId} exists in Emby...`);
     const response = await fetch(`${this.url}/Users/${serviceUserId}`, {
       headers: { "X-Emby-Token": this.apiKey },
@@ -394,6 +368,8 @@ class EmbyService implements ServiceHandler {
   }
 
   async updateProfileImage(serviceUserId: string, imageUrl: string, contentType: string): Promise<void> {
+    await this.ensureInitialized();
+    
     console.log(`Fetching image from URL: ${imageUrl}`);
     const imageResponse = await fetch(imageUrl);
     if (!imageResponse.ok) {
@@ -436,7 +412,7 @@ class AccountServiceManager {
 
   constructor() {
     this.services = {
-      emby: new EmbyService(SERVICES.emby),
+      emby: new EmbyService(EMBY_BASE_URL),
     };
   }
 
@@ -543,13 +519,11 @@ class AccountServiceManager {
 
 async function checkEmbyUsernameLocally(normalizedUsername: string): Promise<boolean> {
   try {
-    if (!EMBY_API_KEY) {
-      throw new HttpsError("internal", "EMBY_API_KEY is not configured in Firebase Functions");
-    }
-
+    const secrets = await getSecretsConfig();
+    
     const embyResponse = await fetch(`${EMBY_BASE_URL}/Users`, {
       method: "GET",
-      headers: { "X-Emby-Token": EMBY_API_KEY },
+      headers: { "X-Emby-Token": secrets.EMBY_API_KEY },
     });
 
     if (!embyResponse.ok) {
@@ -581,14 +555,15 @@ const isValidMagicBytes = (buffer: Buffer, mimeType: string): boolean => {
   return isValid;
 };
 
-
 // Helper function to disable Emby account
 async function disableEmbyAccount(embyUserId: string): Promise<void> {
+  const secrets = await getSecretsConfig();
+  
   const response = await fetch(`${EMBY_BASE_URL}/Users/${embyUserId}/Policy`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      "X-Emby-Token": EMBY_API_KEY,
+      "X-Emby-Token": secrets.EMBY_API_KEY,
     },
     body: JSON.stringify({ IsDisabled: true }),
   });
@@ -600,6 +575,8 @@ async function disableEmbyAccount(embyUserId: string): Promise<void> {
 
 // Helper function to update Emby permissions based on subscription plan
 async function updateEmbySubscriptionPermissions(embyUserId: string, planId: string): Promise<void> {
+  const secrets = await getSecretsConfig();
+  
   // Map subscription plans to Emby permissions
   const planPermissions: { [key: string]: any } = {
     basic: { SimultaneousStreamLimit: 1, EnableContentDownloading: false },
@@ -617,7 +594,7 @@ async function updateEmbySubscriptionPermissions(embyUserId: string, planId: str
 
   // Get current user policy
   const userResponse = await fetch(`${EMBY_BASE_URL}/Users/${embyUserId}`, {
-    headers: { "X-Emby-Token": EMBY_API_KEY },
+    headers: { "X-Emby-Token": secrets.EMBY_API_KEY },
   });
 
   if (!userResponse.ok) {
@@ -639,7 +616,7 @@ async function updateEmbySubscriptionPermissions(embyUserId: string, planId: str
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      "X-Emby-Token": EMBY_API_KEY,
+      "X-Emby-Token": secrets.EMBY_API_KEY,
     },
     body: JSON.stringify(updatedPolicy),
   });
@@ -983,6 +960,7 @@ exports.createPaypalOrder = onCall<CreatePaypalOrderData, Promise<CreatePaypalOr
     }
   }
 );
+
 
 exports.processTokenPurchase = onCall<ProcessTokenPurchaseData, Promise<ProcessTokenPurchaseResponse>>(
   async (request) => {

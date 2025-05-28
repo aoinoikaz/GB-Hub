@@ -15,6 +15,16 @@ const EMBY_API_KEY: string = process.env.EMBY_API_KEY || "";
 const EMBY_BASE_URL: string = "https://media.gondolabros.com";
 const BUCKET = admin.storage().bucket();
 
+
+const SUBSCRIPTION_PLANS: { [key: string]: SubscriptionPlan } = {
+  basic: { monthly: 40, yearly: 400 },
+  standard: { monthly: 60, yearly: 600 },
+  duo: { monthly: 80, yearly: 800 },
+  family: { monthly: 120, yearly: 1200 },
+  vip: { monthly: 180, yearly: 1800 },
+  ultimate: { monthly: 300, yearly: 3000 },
+};
+
 const VALID_MAGIC_BYTES: { [key: string]: number[] } = {
   "image/png": [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a],
   "image/jpeg": [0xff, 0xd8, 0xff],
@@ -105,6 +115,42 @@ interface ProcessTipData {
 interface ProcessTipResponse {
   success: boolean;
   orderId: string;
+}
+
+interface ProcessSubscriptionData {
+  userId: string;
+  planId: string;
+  billingPeriod: "monthly" | "yearly";
+  duration: number;
+}
+
+interface ProcessSubscriptionResponse {
+  success: boolean;
+  subscriptionId: string;
+  endDate: string;
+}
+
+interface SubscriptionPlan {
+  monthly: number;
+  yearly: number;
+}
+
+interface CheckSubscriptionStatusData {
+  userId: string;
+}
+
+interface CheckSubscriptionStatusResponse {
+  hasActiveSubscription: boolean;
+  subscription?: {
+    subscriptionId: string;
+    planId: string;
+    billingPeriod: string;
+    startDate: string;
+    endDate: string;
+    status: string;
+    autoRenew: boolean;
+    daysRemaining: number;
+  };
 }
 
 // Service Handler Interface
@@ -479,6 +525,74 @@ const isValidMagicBytes = (buffer: Buffer, mimeType: string): boolean => {
   });
   return isValid;
 };
+
+
+// Helper function to disable Emby account
+async function disableEmbyAccount(embyUserId: string): Promise<void> {
+  const response = await fetch(`${EMBY_BASE_URL}/Users/${embyUserId}/Policy`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "X-Emby-Token": EMBY_API_KEY,
+    },
+    body: JSON.stringify({ IsDisabled: true }),
+  });
+
+  if (!response.ok) {
+    throw new Error(`Failed to disable Emby account: ${response.status}`);
+  }
+}
+
+// Helper function to update Emby permissions based on subscription plan
+async function updateEmbySubscriptionPermissions(embyUserId: string, planId: string): Promise<void> {
+  // Map subscription plans to Emby permissions
+  const planPermissions: { [key: string]: any } = {
+    basic: { SimultaneousStreamLimit: 1, EnableContentDownloading: false },
+    standard: { SimultaneousStreamLimit: 1, EnableContentDownloading: true },
+    duo: { SimultaneousStreamLimit: 2, EnableContentDownloading: true },
+    family: { SimultaneousStreamLimit: 4, EnableContentDownloading: true },
+    vip: { SimultaneousStreamLimit: 5, EnableContentDownloading: true },
+    ultimate: { SimultaneousStreamLimit: 0, EnableContentDownloading: true }, // 0 = unlimited
+  };
+
+  const permissions = planPermissions[planId];
+  if (!permissions) {
+    throw new Error(`Unknown plan ID: ${planId}`);
+  }
+
+  // Get current user policy
+  const userResponse = await fetch(`${EMBY_BASE_URL}/Users/${embyUserId}`, {
+    headers: { "X-Emby-Token": EMBY_API_KEY },
+  });
+
+  if (!userResponse.ok) {
+    throw new Error(`Failed to get Emby user: ${userResponse.status}`);
+  }
+
+  const userData = await userResponse.json();
+  const currentPolicy = userData.Policy || {};
+
+  // Merge with new permissions
+  const updatedPolicy = {
+    ...currentPolicy,
+    ...permissions,
+    IsDisabled: false, // Ensure account is active
+  };
+
+  // Update user policy
+  const updateResponse = await fetch(`${EMBY_BASE_URL}/Users/${embyUserId}/Policy`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "X-Emby-Token": EMBY_API_KEY,
+    },
+    body: JSON.stringify(updatedPolicy),
+  });
+
+  if (!updateResponse.ok) {
+    throw new Error(`Failed to update Emby user policy: ${updateResponse.status}`);
+  }
+}
 
 const accountServiceManager = new AccountServiceManager();
 
@@ -1270,3 +1384,363 @@ exports.processTip = onCall<ProcessTipData, Promise<ProcessTipResponse>>(async (
     throw new HttpsError("internal", `Failed to process tip: ${errorMessage}`);
   }
 });
+
+
+// Add this cloud function to your index.ts
+exports.processSubscription = onCall<ProcessSubscriptionData, Promise<ProcessSubscriptionResponse>>(
+  async (request) => {
+    const { userId, planId, billingPeriod, duration } = request.data;
+    const auth = request.auth;
+
+    // Validate authentication
+    if (!auth) {
+      throw new HttpsError("unauthenticated", "User must be authenticated to process a subscription.");
+    }
+
+    // Verify that the authenticated user matches the userId
+    if (auth.uid !== userId) {
+      throw new HttpsError("permission-denied", "User ID does not match authenticated user.");
+    }
+
+    // Validate input data
+    if (!userId || !planId || !billingPeriod || !duration) {
+      throw new HttpsError(
+        "invalid-argument",
+        "Missing required fields: userId, planId, billingPeriod, duration."
+      );
+    }
+
+    // Validate plan exists
+    if (!SUBSCRIPTION_PLANS.hasOwnProperty(planId)) {
+      throw new HttpsError("invalid-argument", "Invalid subscription plan ID.");
+    }
+
+    // Validate billing period
+    if (billingPeriod !== "monthly" && billingPeriod !== "yearly") {
+      throw new HttpsError("invalid-argument", "Billing period must be 'monthly' or 'yearly'.");
+    }
+
+    // Validate duration
+    if (typeof duration !== "number" || duration <= 0) {
+      throw new HttpsError("invalid-argument", "Duration must be a positive number.");
+    }
+
+    // Duration limits based on billing period
+    const maxDuration = billingPeriod === "monthly" ? 12 : 3;
+    if (duration > maxDuration) {
+      throw new HttpsError(
+        "invalid-argument",
+        `Maximum duration for ${billingPeriod} billing is ${maxDuration}.`
+      );
+    }
+
+    try {
+      // Calculate token cost
+      const plan = SUBSCRIPTION_PLANS[planId];
+      const baseTokens = billingPeriod === "monthly" ? plan.monthly : plan.yearly;
+      const totalTokenCost = baseTokens * duration;
+
+      // Run transaction to ensure atomicity
+      const result = await admin.firestore().runTransaction(async (transaction) => {
+        // Get user document
+        const userRef = admin.firestore().doc(`users/${userId}`);
+        const userDoc = await transaction.get(userRef);
+        
+        if (!userDoc.exists) {
+          throw new HttpsError("not-found", "User not found in Firestore.");
+        }
+
+        const userData = userDoc.data();
+        const currentTokenBalance = userData?.tokenBalance || 0;
+
+        // Check if user has enough tokens
+        if (currentTokenBalance < totalTokenCost) {
+          throw new HttpsError(
+            "failed-precondition",
+            `Insufficient tokens. Required: ${totalTokenCost}, Available: ${currentTokenBalance}`
+          );
+        }
+
+        // Check for existing active subscription
+        const activeSubQuery = admin.firestore()
+          .collection("subscriptions")
+          .where("userId", "==", userId)
+          .where("status", "==", "active");
+        const activeSubSnapshot = await transaction.get(activeSubQuery);
+
+        if (!activeSubSnapshot.empty) {
+          // Handle existing subscription - for now, we'll prevent multiple active subscriptions
+          throw new HttpsError(
+            "failed-precondition",
+            "User already has an active subscription. Please cancel the existing subscription first."
+          );
+        }
+
+        // Calculate subscription dates
+        const startDate = admin.firestore.Timestamp.now();
+        let endDate: admin.firestore.Timestamp;
+        
+        if (billingPeriod === "monthly") {
+          const endDateMs = startDate.toDate();
+          endDateMs.setMonth(endDateMs.getMonth() + duration);
+          endDate = admin.firestore.Timestamp.fromDate(endDateMs);
+        } else {
+          const endDateMs = startDate.toDate();
+          endDateMs.setFullYear(endDateMs.getFullYear() + duration);
+          endDate = admin.firestore.Timestamp.fromDate(endDateMs);
+        }
+
+        // Create subscription document
+        const subscriptionRef = admin.firestore().collection("subscriptions").doc();
+        const subscriptionData = {
+          userId,
+          planId,
+          billingPeriod,
+          duration,
+          startDate,
+          endDate,
+          status: "active",
+          autoRenew: false, // Default to false, can be implemented later
+          tokenCost: totalTokenCost,
+          createdAt: admin.firestore.FieldValue.serverTimestamp(),
+          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        };
+
+        transaction.set(subscriptionRef, subscriptionData);
+
+        // Update user's token balance and subscription info
+        transaction.update(userRef, {
+          tokenBalance: currentTokenBalance - totalTokenCost,
+          "services.emby.currentPlan": planId,
+          "services.emby.subscriptionStatus": "active",
+          "services.emby.subscriptionId": subscriptionRef.id,
+          "services.emby.subscriptionEndDate": endDate,
+        });
+
+        // Create subscription history entry
+        const historyRef = admin.firestore().collection("subscription_history").doc();
+        transaction.set(historyRef, {
+          userId,
+          subscriptionId: subscriptionRef.id,
+          action: "created",
+          planId,
+          billingPeriod,
+          duration,
+          tokenCost: totalTokenCost,
+          timestamp: admin.firestore.FieldValue.serverTimestamp(),
+        });
+
+        // Create redemption record for transaction history
+        const redemptionRef = admin.firestore().collection("redemptions").doc();
+        transaction.set(redemptionRef, {
+          userId,
+          productType: "subscription",
+          productId: planId,
+          billingPeriod,
+          duration,
+          tokenCost: totalTokenCost,
+          subscriptionId: subscriptionRef.id,
+          status: "completed",
+          createdAt: admin.firestore.FieldValue.serverTimestamp(),
+        });
+
+        // Update Emby permissions based on plan
+        const embyServiceData = userData?.services?.emby;
+        if (embyServiceData?.serviceUserId) {
+          // We'll update Emby after the transaction commits
+          return {
+            subscriptionId: subscriptionRef.id,
+            endDate: endDate.toDate().toISOString(),
+            embyUserId: embyServiceData.serviceUserId,
+            needsEmbyUpdate: true,
+          };
+        }
+
+        return {
+          subscriptionId: subscriptionRef.id,
+          endDate: endDate.toDate().toISOString(),
+          needsEmbyUpdate: false,
+        };
+      });
+
+      // Update Emby permissions if needed (outside transaction)
+      if (result.needsEmbyUpdate && result.embyUserId) {
+        try {
+          await updateEmbySubscriptionPermissions(result.embyUserId, planId);
+          console.log(`Updated Emby permissions for user ${result.embyUserId} with plan ${planId}`);
+        } catch (embyError) {
+          // Log error but don't fail the subscription
+          console.error("Failed to update Emby permissions:", embyError);
+          // You might want to queue this for retry
+        }
+      }
+
+      return {
+        success: true,
+        subscriptionId: result.subscriptionId,
+        endDate: result.endDate,
+      };
+
+    } catch (error: unknown) {
+      console.error("Error in processSubscription:", error);
+      if (error instanceof HttpsError) {
+        throw error;
+      }
+      const errorMessage = error instanceof Error ? error.message : "Unknown error";
+      throw new HttpsError("internal", `Failed to process subscription: ${errorMessage}`);
+    }
+  }
+);
+
+// Add this cloud function to your index.ts
+exports.checkSubscriptionStatus = onCall<CheckSubscriptionStatusData, Promise<CheckSubscriptionStatusResponse>>(
+  async (request) => {
+    const { userId } = request.data;
+    const auth = request.auth;
+
+    // Validate authentication
+    if (!auth) {
+      throw new HttpsError("unauthenticated", "User must be authenticated to check subscription status.");
+    }
+
+    // Verify that the authenticated user matches the userId or is an admin
+    if (auth.uid !== userId) {
+      throw new HttpsError("permission-denied", "User ID does not match authenticated user.");
+    }
+
+    if (!userId) {
+      throw new HttpsError("invalid-argument", "User ID is required.");
+    }
+
+    try {
+      // Query for active subscription
+      const subscriptionsRef = admin.firestore().collection("subscriptions");
+      const activeSubQuery = subscriptionsRef
+        .where("userId", "==", userId)
+        .where("status", "==", "active")
+        .orderBy("createdAt", "desc")
+        .limit(1);
+
+      const snapshot = await activeSubQuery.get();
+
+      if (snapshot.empty) {
+        // Check if there's an expired subscription that needs updating
+        const expiredQuery = subscriptionsRef
+          .where("userId", "==", userId)
+          .where("status", "==", "active")
+          .where("endDate", "<=", admin.firestore.Timestamp.now());
+        
+        const expiredSnapshot = await expiredQuery.get();
+        
+        // Update expired subscriptions
+        const batch = admin.firestore().batch();
+        let hasUpdates = false;
+        
+        expiredSnapshot.forEach((doc) => {
+          batch.update(doc.ref, {
+            status: "expired",
+            updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+          });
+          hasUpdates = true;
+        });
+
+        if (hasUpdates) {
+          await batch.commit();
+          
+          // Update user's service status
+          const userRef = admin.firestore().doc(`users/${userId}`);
+          await userRef.update({
+            "services.emby.subscriptionStatus": "inactive",
+            "services.emby.currentPlan": null,
+          });
+
+          // Disable Emby account
+          const userDoc = await userRef.get();
+          const userData = userDoc.data();
+          const embyUserId = userData?.services?.emby?.serviceUserId;
+          
+          if (embyUserId) {
+            try {
+              await disableEmbyAccount(embyUserId);
+            } catch (error) {
+              console.error("Failed to disable Emby account:", error);
+            }
+          }
+        }
+
+        return {
+          hasActiveSubscription: false,
+        };
+      }
+
+      // Get the active subscription
+      const subscriptionDoc = snapshot.docs[0];
+      const subscriptionData = subscriptionDoc.data();
+      
+      // Calculate days remaining
+      const endDate = subscriptionData.endDate.toDate();
+      const now = new Date();
+      const daysRemaining = Math.max(0, Math.ceil((endDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24)));
+
+      // Check if subscription has expired
+      if (endDate <= now) {
+        // Update subscription status
+        await subscriptionDoc.ref.update({
+          status: "expired",
+          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        });
+
+        // Update user's service status
+        const userRef = admin.firestore().doc(`users/${userId}`);
+        await userRef.update({
+          "services.emby.subscriptionStatus": "inactive",
+          "services.emby.currentPlan": null,
+        });
+
+        // Create history entry
+        await admin.firestore().collection("subscription_history").add({
+          userId,
+          subscriptionId: subscriptionDoc.id,
+          action: "expired",
+          timestamp: admin.firestore.FieldValue.serverTimestamp(),
+        });
+
+        // Disable Emby account
+        const userDoc = await userRef.get();
+        const userData = userDoc.data();
+        const embyUserId = userData?.services?.emby?.serviceUserId;
+        
+        if (embyUserId) {
+          try {
+            await disableEmbyAccount(embyUserId);
+          } catch (error) {
+            console.error("Failed to disable Emby account:", error);
+          }
+        }
+
+        return {
+          hasActiveSubscription: false,
+        };
+      }
+
+      return {
+        hasActiveSubscription: true,
+        subscription: {
+          subscriptionId: subscriptionDoc.id,
+          planId: subscriptionData.planId,
+          billingPeriod: subscriptionData.billingPeriod,
+          startDate: subscriptionData.startDate.toDate().toISOString(),
+          endDate: endDate.toISOString(),
+          status: subscriptionData.status,
+          autoRenew: subscriptionData.autoRenew || false,
+          daysRemaining,
+        },
+      };
+
+    } catch (error: unknown) {
+      console.error("Error in checkSubscriptionStatus:", error);
+      const errorMessage = error instanceof Error ? error.message : "Unknown error";
+      throw new HttpsError("internal", `Failed to check subscription status: ${errorMessage}`);
+    }
+  }
+);

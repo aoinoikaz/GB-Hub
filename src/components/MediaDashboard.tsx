@@ -1,10 +1,31 @@
 import { useState, useEffect } from "react";
-import { doc, getDoc, addDoc, collection, serverTimestamp, updateDoc } from "firebase/firestore";
+import { doc, getDoc } from "firebase/firestore";
 import { db } from "../config/firebase";
 import { useAuth } from "../context/auth-context";
 import { Info, Spinner, Monitor, Download, FilmSlate, Television, Users, Crown, Star, Check, X } from "phosphor-react";
 import { getFunctions, httpsCallable } from "firebase/functions";
 import { useNavigate } from "react-router-dom";
+
+// Interfaces for the cloud function responses
+interface ProcessSubscriptionResponse {
+  success: boolean;
+  subscriptionId: string;
+  endDate: string;
+}
+
+interface CheckSubscriptionStatusResponse {
+  hasActiveSubscription: boolean;
+  subscription?: {
+    subscriptionId: string;
+    planId: string;
+    billingPeriod: string;
+    startDate: string;
+    endDate: string;
+    status: string;
+    autoRenew: boolean;
+    daysRemaining: number;
+  };
+}
 
 interface SubscriptionPlan {
   id: string;
@@ -124,6 +145,7 @@ const MediaDashboard = () => {
   const [username, setUsername] = useState<string>("Not set");
   const [subscriptionStatus, setSubscriptionStatus] = useState<string>("Inactive");
   const [currentPlan, setCurrentPlan] = useState<string | null>(null);
+  const [activeSubscription, setActiveSubscription] = useState<any>(null);
   const [tokenBalance, setTokenBalance] = useState<number>(0);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -133,6 +155,31 @@ const MediaDashboard = () => {
   const [duration, setDuration] = useState<number>(1);
   const [redeeming, setRedeeming] = useState(false);
   const functions = getFunctions();
+
+  // Check subscription status
+  const checkSubscriptionStatus = async () => {
+    if (!user) return;
+    
+    try {
+      const checkStatus = httpsCallable<{userId: string}, CheckSubscriptionStatusResponse>(
+        functions, 
+        "checkSubscriptionStatus"
+      );
+      const result = await checkStatus({ userId: user.uid });
+      
+      if (result.data.hasActiveSubscription && result.data.subscription) {
+        setActiveSubscription(result.data.subscription);
+        setCurrentPlan(result.data.subscription.planId);
+        setSubscriptionStatus("active");
+      } else {
+        setActiveSubscription(null);
+        setCurrentPlan(null);
+        setSubscriptionStatus("inactive");
+      }
+    } catch (err) {
+      console.error("Error checking subscription status:", err);
+    }
+  };
 
   useEffect(() => {
     if (!user || authLoading) return;
@@ -150,8 +197,8 @@ const MediaDashboard = () => {
           if (embyService?.linked) {
             setIsLinked(true);
             setUsername(user.displayName || "Not set");
-            setSubscriptionStatus(embyService.subscriptionStatus || "Inactive");
-            setCurrentPlan(embyService.currentPlan || null);
+            // Check subscription status via cloud function
+            await checkSubscriptionStatus();
           } else {
             setIsLinked(false);
             setUsername(user.displayName || "Not set");
@@ -217,40 +264,38 @@ const MediaDashboard = () => {
         throw new Error("Insufficient tokens for this subscription");
       }
 
-      // Update user's token balance
-      const userRef = doc(db, `users/${user.uid}`);
-      await updateDoc(userRef, {
-        tokenBalance: tokenBalance - tokenCost,
-        "services.emby.currentPlan": selectedPlan,
-        "services.emby.subscriptionStatus": "active",
-      });
-
-      // Log the redemption
-      await addDoc(collection(db, "redemptions"), {
+      // Process subscription via cloud function
+      const processSubscription = httpsCallable<any, ProcessSubscriptionResponse>(
+        functions, 
+        "processSubscription"
+      );
+      
+      const result = await processSubscription({
         userId: user.uid,
-        productType: "subscription",
-        productId: selectedPlan,
+        planId: selectedPlan,
         billingPeriod,
         duration,
-        tokenCost,
-        createdAt: serverTimestamp(),
       });
 
-      // Refresh user data
-      const userSnap = await getDoc(userRef);
-      if (userSnap.exists()) {
-        const data = userSnap.data();
-        setTokenBalance(data.tokenBalance || 0);
-        setCurrentPlan(selectedPlan);
-        setSubscriptionStatus("active");
-      }
+      if (result.data.success) {
+        // Refresh user data
+        const userRef = doc(db, `users/${user.uid}`);
+        const userSnap = await getDoc(userRef);
+        if (userSnap.exists()) {
+          const data = userSnap.data();
+          setTokenBalance(data.tokenBalance || 0);
+        }
 
-      setSelectedPlan(null);
-      setDuration(1);
-      
-      // Activate the account if not already active
-      if (subscriptionStatus !== "active") {
-        await handleActivate();
+        // Check subscription status again
+        await checkSubscriptionStatus();
+        
+        setSelectedPlan(null);
+        setDuration(1);
+        
+        // Activate the account if not already active
+        if (subscriptionStatus !== "active") {
+          await handleActivate();
+        }
       }
       
     } catch (err: any) {
@@ -301,6 +346,11 @@ const MediaDashboard = () => {
                 <strong>Current Plan:</strong> {subscriptionPlans.find(p => p.id === currentPlan)?.name || currentPlan}
               </p>
             )}
+            {activeSubscription && (
+              <p className="text-sm text-gray-400 mt-2">
+                {activeSubscription.daysRemaining} days remaining • Expires {new Date(activeSubscription.endDate).toLocaleDateString()}
+              </p>
+            )}
           </div>
           <div className="text-right">
             <p className="text-2xl font-bold text-yellow-400">{tokenBalance} tokens</p>
@@ -332,7 +382,9 @@ const MediaDashboard = () => {
         <>
           {/* Subscription Plans */}
           <div className="mb-6">
-            <h2 className="text-2xl font-bold mb-4">Choose Your Plan</h2>
+            <h2 className="text-2xl font-bold mb-4">
+              {activeSubscription ? "Upgrade Your Plan" : "Choose Your Plan"}
+            </h2>
             
             {/* Billing Period Toggle */}
             <div className="flex justify-center mb-6">
@@ -497,9 +549,9 @@ const MediaDashboard = () => {
               <div className="flex gap-4">
                 <button
                   onClick={handleRedeemSubscription}
-                  disabled={redeeming || tokenBalance < tokenCost}
+                  disabled={redeeming || tokenBalance < tokenCost || (activeSubscription && selectedPlan === currentPlan)}
                   className={`flex-1 py-2 px-4 rounded-md font-semibold transition ${
-                    redeeming || tokenBalance < tokenCost
+                    redeeming || tokenBalance < tokenCost || (activeSubscription && selectedPlan === currentPlan)
                       ? "bg-gray-600 cursor-not-allowed opacity-50"
                       : "bg-gradient-to-r from-purple-500 to-pink-500 hover:opacity-90"
                   } text-white`}
@@ -508,6 +560,10 @@ const MediaDashboard = () => {
                     <Spinner size={20} className="animate-spin mx-auto" />
                   ) : tokenBalance < tokenCost ? (
                     "Insufficient Tokens"
+                  ) : activeSubscription && selectedPlan === currentPlan ? (
+                    "Already Subscribed"
+                  ) : activeSubscription ? (
+                    "Upgrade Plan"
                   ) : (
                     "Subscribe Now"
                   )}

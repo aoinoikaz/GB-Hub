@@ -1,28 +1,141 @@
 import { useState, useEffect } from "react";
-import { doc, getDoc } from "firebase/firestore";
+import { doc, getDoc, addDoc, collection, serverTimestamp, updateDoc } from "firebase/firestore";
 import { db } from "../config/firebase";
 import { useAuth } from "../context/auth-context";
-import { Info, Spinner } from "phosphor-react";
+import { Info, Spinner, Monitor, Download, FilmSlate, Users, Crown, Star, Check, X } from "phosphor-react";
 import { getFunctions, httpsCallable } from "firebase/functions";
+import { useNavigate } from "react-router-dom";
+
+interface SubscriptionPlan {
+  id: string;
+  name: string;
+  monthlyTokens: number;
+  yearlyTokens: number;
+  features: {
+    streams: number | "unlimited";
+    downloads: boolean;
+    movieRequests: number | "unlimited";
+    tvRequests: number | "unlimited";
+    support: "standard" | "priority";
+  };
+  popular?: boolean;
+  icon: React.ReactNode;
+  color: string;
+}
+
+const subscriptionPlans: SubscriptionPlan[] = [
+  {
+    id: "basic",
+    name: "Basic",
+    monthlyTokens: 40,
+    yearlyTokens: 400,
+    features: {
+      streams: 1,
+      downloads: false,
+      movieRequests: 0,
+      tvRequests: 0,
+      support: "standard",
+    },
+    icon: <Monitor size={24} />,
+    color: "blue",
+  },
+  {
+    id: "standard",
+    name: "Standard",
+    monthlyTokens: 60,
+    yearlyTokens: 600,
+    features: {
+      streams: 1,
+      downloads: true,
+      movieRequests: 1,
+      tvRequests: 1,
+      support: "standard",
+    },
+    icon: <Download size={24} />,
+    color: "green",
+  },
+  {
+    id: "duo",
+    name: "Duo",
+    monthlyTokens: 80,
+    yearlyTokens: 800,
+    features: {
+      streams: 2,
+      downloads: true,
+      movieRequests: 2,
+      tvRequests: 1,
+      support: "standard",
+    },
+    icon: <Users size={24} />,
+    color: "purple",
+    popular: true,
+  },
+  {
+    id: "family",
+    name: "Family",
+    monthlyTokens: 120,
+    yearlyTokens: 1200,
+    features: {
+      streams: 4,
+      downloads: true,
+      movieRequests: 4,
+      tvRequests: 2,
+      support: "standard",
+    },
+    icon: <Users size={24} />,
+    color: "pink",
+  },
+  {
+    id: "vip",
+    name: "VIP",
+    monthlyTokens: 180,
+    yearlyTokens: 1800,
+    features: {
+      streams: 5,
+      downloads: true,
+      movieRequests: 10,
+      tvRequests: 5,
+      support: "priority",
+    },
+    icon: <Crown size={24} />,
+    color: "yellow",
+  },
+  {
+    id: "ultimate",
+    name: "Ultimate",
+    monthlyTokens: 300,
+    yearlyTokens: 3000,
+    features: {
+      streams: "unlimited",
+      downloads: true,
+      movieRequests: "unlimited",
+      tvRequests: "unlimited",
+      support: "priority",
+    },
+    icon: <Star size={24} />,
+    color: "red",
+  },
+];
 
 const MediaDashboard = () => {
   const { user, loading: authLoading } = useAuth();
+  const navigate = useNavigate();
   const [isLinked, setIsLinked] = useState(false);
   const [username, setUsername] = useState<string>("Not set");
   const [subscriptionStatus, setSubscriptionStatus] = useState<string>("Inactive");
+  const [currentPlan, setCurrentPlan] = useState<string | null>(null);
+  const [tokenBalance, setTokenBalance] = useState<number>(0);
   const [error, setError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true); // New state to handle data fetching
-  const [activating, setActivating] = useState(false); // New state for activation loading
+  const [loading, setLoading] = useState(true);
+  const [activating, setActivating] = useState(false);
+  const [selectedPlan, setSelectedPlan] = useState<string | null>(null);
+  const [billingPeriod, setBillingPeriod] = useState<"monthly" | "yearly">("monthly");
+  const [duration, setDuration] = useState<number>(1);
+  const [redeeming, setRedeeming] = useState(false);
   const functions = getFunctions();
 
   useEffect(() => {
     if (!user || authLoading) return;
-
-    console.log("User authenticated in MediaDashboard:", {
-      uid: user.uid,
-      email: user.email,
-      displayName: user.displayName,
-    });
 
     const fetchUserData = async () => {
       try {
@@ -32,11 +145,13 @@ const MediaDashboard = () => {
 
         if (userSnap.exists()) {
           const data = userSnap.data();
+          setTokenBalance(data.tokenBalance || 0);
           const embyService = data.services?.emby;
           if (embyService?.linked) {
             setIsLinked(true);
             setUsername(user.displayName || "Not set");
             setSubscriptionStatus(embyService.subscriptionStatus || "Inactive");
+            setCurrentPlan(embyService.currentPlan || null);
           } else {
             setIsLinked(false);
             setUsername(user.displayName || "Not set");
@@ -79,7 +194,73 @@ const MediaDashboard = () => {
     }
   };
 
-  // Show a loading state while fetching data
+  const calculateTokenCost = () => {
+    if (!selectedPlan) return 0;
+    const plan = subscriptionPlans.find((p) => p.id === selectedPlan);
+    if (!plan) return 0;
+    
+    const baseTokens = billingPeriod === "monthly" ? plan.monthlyTokens : plan.yearlyTokens;
+    const multiplier = billingPeriod === "monthly" ? duration : duration;
+    return baseTokens * multiplier;
+  };
+
+  const handleRedeemSubscription = async () => {
+    if (!selectedPlan || !user) return;
+    
+    setRedeeming(true);
+    setError(null);
+
+    try {
+      const tokenCost = calculateTokenCost();
+      
+      if (tokenBalance < tokenCost) {
+        throw new Error("Insufficient tokens for this subscription");
+      }
+
+      // Update user's token balance
+      const userRef = doc(db, `users/${user.uid}`);
+      await updateDoc(userRef, {
+        tokenBalance: tokenBalance - tokenCost,
+        "services.emby.currentPlan": selectedPlan,
+        "services.emby.subscriptionStatus": "active",
+      });
+
+      // Log the redemption
+      await addDoc(collection(db, "redemptions"), {
+        userId: user.uid,
+        productType: "subscription",
+        productId: selectedPlan,
+        billingPeriod,
+        duration,
+        tokenCost,
+        createdAt: serverTimestamp(),
+      });
+
+      // Refresh user data
+      const userSnap = await getDoc(userRef);
+      if (userSnap.exists()) {
+        const data = userSnap.data();
+        setTokenBalance(data.tokenBalance || 0);
+        setCurrentPlan(selectedPlan);
+        setSubscriptionStatus("active");
+      }
+
+      setSelectedPlan(null);
+      setDuration(1);
+      
+      // Activate the account if not already active
+      if (subscriptionStatus !== "active") {
+        await handleActivate();
+      }
+      
+    } catch (err: any) {
+      setError(err.message || "Failed to redeem subscription");
+      console.error("Redemption error:", err);
+    } finally {
+      setRedeeming(false);
+    }
+  };
+
   if (loading || authLoading) {
     return (
       <div className="p-6 bg-gray-900 text-white rounded-lg text-center">
@@ -94,37 +275,47 @@ const MediaDashboard = () => {
     );
   }
 
+  const tokenCost = calculateTokenCost();
+
   return (
-    <div className="p-6 bg-gray-900 text-white rounded-lg text-center">
-      <div className="text-left mb-6">
+    <div className="p-6 bg-gray-900 text-white rounded-lg">
+      <div className="mb-6">
         <h1 className="text-3xl font-bold">Media Dashboard</h1>
-        <p className="text-gray-400">Manage your media account preferences</p>
+        <p className="text-gray-400">Manage your media account and subscription</p>
       </div>
 
-      {error && <p className="text-red-500 text-sm">{error}</p>}
+      {error && <p className="text-red-500 text-sm mb-4">{error}</p>}
 
-      {isLinked ? (
-        <div className="p-4 bg-gray-800 text-white rounded-lg shadow-md">
-          <p className="mb-2 text-lg font-semibold">
-            <strong>Username:</strong> {username}
-          </p>
-          <p className="text-lg font-semibold">
-            <strong>Subscription Status:</strong> {subscriptionStatus}
-          </p>
-          <button
-            onClick={handleActivate}
-            className={`mt-4 px-4 py-2 rounded-md text-white ${
-              subscriptionStatus === "active" || activating
-                ? "bg-gray-500 opacity-50 cursor-not-allowed"
-                : "bg-gradient-to-r from-purple-500 to-pink-500 hover:opacity-90"
-            }`}
-            disabled={subscriptionStatus === "active" || activating}
-          >
-            {activating ? <Spinner size={20} className="animate-spin mx-auto" /> : "Activate Account"}
-          </button>
+      {/* Account Status */}
+      <div className="mb-6 p-4 bg-gray-800 rounded-lg">
+        <div className="flex justify-between items-center">
+          <div>
+            <p className="text-lg font-semibold">
+              <strong>Username:</strong> {username}
+            </p>
+            <p className="text-lg font-semibold">
+              <strong>Status:</strong> {subscriptionStatus}
+            </p>
+            {currentPlan && (
+              <p className="text-lg font-semibold">
+                <strong>Current Plan:</strong> {subscriptionPlans.find(p => p.id === currentPlan)?.name || currentPlan}
+              </p>
+            )}
+          </div>
+          <div className="text-right">
+            <p className="text-2xl font-bold text-yellow-400">{tokenBalance} tokens</p>
+            <button
+              onClick={() => navigate("/store")}
+              className="mt-2 text-sm text-purple-400 hover:text-purple-300 underline"
+            >
+              Get more tokens
+            </button>
+          </div>
         </div>
-      ) : (
-        <div className="p-4 bg-gray-800 text-white rounded-lg mx-auto flex flex-col items-center shadow-md max-w-md w-full">
+      </div>
+
+      {!isLinked ? (
+        <div className="p-4 bg-gray-800 text-white rounded-lg flex flex-col items-center shadow-md">
           <div className="flex items-center mb-4">
             <Info size={24} className="mr-2 text-blue-400" />
             <h3 className="text-2xl font-bold text-white">Media Account Not Linked</h3>
@@ -137,66 +328,199 @@ const MediaDashboard = () => {
             to link your account.
           </p>
         </div>
-      )}
-
-      {/* Subscription Plans Information */}
-      {isLinked && (
-        <div className="mt-8 p-6 bg-gray-800 rounded-lg">
-          <h2 className="text-2xl font-bold mb-4">Subscription Plans</h2>
-          <p className="text-gray-300 mb-6">
-            Upgrade your plan to unlock more features. All plans include full access to our media library.
-          </p>
-          
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            {/* Basic Plan */}
-            <div className="p-4 border border-gray-600 rounded-lg">
-              <h3 className="text-xl font-semibold text-blue-400 mb-2">Basic</h3>
-              <p className="text-2xl font-bold mb-2">60 tokens/month</p>
-              <p className="text-sm text-gray-400 mb-4">600 tokens/year (save 120 tokens)</p>
-              <ul className="text-sm text-gray-300 space-y-1">
-                <li>• Full media library access</li>
-                <li>• 2 simultaneous streams</li>
-                <li>• Standard support</li>
-              </ul>
-            </div>
-
-            {/* Standard Plan */}
-            <div className="p-4 border-2 border-purple-500 rounded-lg relative">
-              <div className="absolute -top-3 left-1/2 transform -translate-x-1/2 bg-purple-500 text-white px-3 py-1 rounded-full text-xs">
-                Most Popular
+      ) : (
+        <>
+          {/* Subscription Plans */}
+          <div className="mb-6">
+            <h2 className="text-2xl font-bold mb-4">Choose Your Plan</h2>
+            
+            {/* Billing Period Toggle */}
+            <div className="flex justify-center mb-6">
+              <div className="bg-gray-800 rounded-lg p-1 flex">
+                <button
+                  onClick={() => setBillingPeriod("monthly")}
+                  className={`px-4 py-2 rounded-md transition ${
+                    billingPeriod === "monthly"
+                      ? "bg-purple-500 text-white"
+                      : "text-gray-400 hover:text-white"
+                  }`}
+                >
+                  Monthly
+                </button>
+                <button
+                  onClick={() => setBillingPeriod("yearly")}
+                  className={`px-4 py-2 rounded-md transition ${
+                    billingPeriod === "yearly"
+                      ? "bg-purple-500 text-white"
+                      : "text-gray-400 hover:text-white"
+                  }`}
+                >
+                  Yearly (Save up to 20%)
+                </button>
               </div>
-              <h3 className="text-xl font-semibold text-purple-400 mb-2">Standard</h3>
-              <p className="text-2xl font-bold mb-2">120 tokens/month</p>
-              <p className="text-sm text-gray-400 mb-4">1200 tokens/year (save 240 tokens)</p>
-              <ul className="text-sm text-gray-300 space-y-1">
-                <li>• Full media library access</li>
-                <li>• 4 simultaneous streams</li>
-                <li>• Priority support</li>
-                <li>• Request priority</li>
-              </ul>
             </div>
 
-            {/* Premium Plan */}
-            <div className="p-4 border border-gray-600 rounded-lg">
-              <h3 className="text-xl font-semibold text-pink-400 mb-2">Premium</h3>
-              <p className="text-2xl font-bold mb-2">180 tokens/month</p>
-              <p className="text-sm text-gray-400 mb-4">1800 tokens/year (save 360 tokens)</p>
-              <ul className="text-sm text-gray-300 space-y-1">
-                <li>• Full media library access</li>
-                <li>• 6 simultaneous streams</li>
-                <li>• Premium support</li>
-                <li>• Highest request priority</li>
-                <li>• Early access features</li>
-              </ul>
+            {/* Plans Grid */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {subscriptionPlans.map((plan) => (
+                <div
+                  key={plan.id}
+                  className={`relative p-4 border-2 rounded-lg cursor-pointer transition ${
+                    selectedPlan === plan.id
+                      ? `border-${plan.color}-500 bg-gray-800/50`
+                      : "border-gray-700 hover:border-gray-600"
+                  } ${currentPlan === plan.id ? "ring-2 ring-green-500" : ""}`}
+                  onClick={() => setSelectedPlan(plan.id)}
+                >
+                  {plan.popular && (
+                    <div className="absolute -top-3 left-1/2 transform -translate-x-1/2 bg-purple-500 text-white px-3 py-1 rounded-full text-xs">
+                      Most Popular
+                    </div>
+                  )}
+                  {currentPlan === plan.id && (
+                    <div className="absolute -top-3 right-4 bg-green-500 text-white px-3 py-1 rounded-full text-xs">
+                      Current Plan
+                    </div>
+                  )}
+                  
+                  <div className={`flex items-center mb-3 text-${plan.color}-400`}>
+                    {plan.icon}
+                    <h3 className="text-xl font-semibold ml-2">{plan.name}</h3>
+                  </div>
+                  
+                  <p className="text-2xl font-bold mb-1">
+                    {billingPeriod === "monthly" ? plan.monthlyTokens : plan.yearlyTokens} tokens
+                  </p>
+                  <p className="text-sm text-gray-400 mb-4">
+                    per {billingPeriod === "monthly" ? "month" : "year"}
+                    {billingPeriod === "yearly" && (
+                      <span className="text-green-400 ml-1">
+                        (save {plan.monthlyTokens * 12 - plan.yearlyTokens} tokens)
+                      </span>
+                    )}
+                  </p>
+                  
+                  <ul className="text-sm space-y-2">
+                    <li className="flex items-center">
+                      <Check size={16} className="text-green-400 mr-2" />
+                      Full library access
+                    </li>
+                    <li className="flex items-center">
+                      <Check size={16} className="text-green-400 mr-2" />
+                      {plan.features.streams === "unlimited" ? "Unlimited" : plan.features.streams} stream{plan.features.streams !== 1 ? "s" : ""}
+                    </li>
+                    <li className="flex items-center">
+                      {plan.features.downloads ? (
+                        <Check size={16} className="text-green-400 mr-2" />
+                      ) : (
+                        <X size={16} className="text-red-400 mr-2" />
+                      )}
+                      Downloads
+                    </li>
+                    <li className="flex items-center">
+                      <FilmSlate size={16} className="mr-2 text-gray-400" />
+                      {plan.features.movieRequests === 0
+                        ? "No movie requests"
+                        : plan.features.movieRequests === "unlimited"
+                        ? "Unlimited movie requests"
+                        : `${plan.features.movieRequests} movie request${plan.features.movieRequests > 1 ? "s" : ""}`}
+                    </li>
+                    <li className="flex items-center">
+                      <FilmSlate size={16} className="mr-2 text-gray-400" />
+                      {plan.features.tvRequests === 0
+                        ? "No TV requests"
+                        : plan.features.tvRequests === "unlimited"
+                        ? "Unlimited TV requests"
+                        : `${plan.features.tvRequests} TV show${plan.features.tvRequests > 1 ? "s" : ""}`}
+                    </li>
+                    <li className="flex items-center">
+                      {plan.features.support === "priority" ? (
+                        <Star size={16} className="text-yellow-400 mr-2" />
+                      ) : (
+                        <Info size={16} className="text-gray-400 mr-2" />
+                      )}
+                      {plan.features.support === "priority" ? "Priority" : "Regular"} support
+                    </li>
+                  </ul>
+                </div>
+              ))}
             </div>
           </div>
 
-          <div className="mt-6 text-center">
-            <p className="text-gray-400">
-              Visit the <a href="/store" className="text-purple-400 hover:text-purple-300 underline">Store</a> to purchase tokens and subscribe to a plan.
-            </p>
-          </div>
-        </div>
+          {/* Redemption Section */}
+          {selectedPlan && (
+            <div className="mb-6 p-4 bg-gray-800 rounded-lg">
+              <h3 className="text-xl font-semibold mb-4">Complete Your Subscription</h3>
+              
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                <div>
+                  <label className="block mb-2 text-gray-300">Duration</label>
+                  <select
+                    value={duration}
+                    onChange={(e) => setDuration(parseInt(e.target.value))}
+                    className="w-full px-4 py-2 border rounded-md bg-gray-700 border-gray-600 text-white focus:ring-2 focus:ring-purple-500 focus:outline-none"
+                  >
+                    {billingPeriod === "monthly" ? (
+                      <>
+                        <option value={1}>1 month</option>
+                        <option value={3}>3 months</option>
+                        <option value={6}>6 months</option>
+                        <option value={12}>12 months</option>
+                      </>
+                    ) : (
+                      <>
+                        <option value={1}>1 year</option>
+                        <option value={2}>2 years</option>
+                        <option value={3}>3 years</option>
+                      </>
+                    )}
+                  </select>
+                </div>
+                
+                <div className="flex items-end">
+                  <div className="w-full">
+                    <p className="text-gray-300 mb-2">Total Cost</p>
+                    <p className="text-2xl font-bold text-yellow-400">{tokenCost} tokens</p>
+                    {tokenBalance < tokenCost && (
+                      <p className="text-red-400 text-sm mt-1">
+                        You need {tokenCost - tokenBalance} more tokens
+                      </p>
+                    )}
+                  </div>
+                </div>
+              </div>
+              
+              <div className="flex gap-4">
+                <button
+                  onClick={handleRedeemSubscription}
+                  disabled={redeeming || tokenBalance < tokenCost}
+                  className={`flex-1 py-2 px-4 rounded-md font-semibold transition ${
+                    redeeming || tokenBalance < tokenCost
+                      ? "bg-gray-600 cursor-not-allowed opacity-50"
+                      : "bg-gradient-to-r from-purple-500 to-pink-500 hover:opacity-90"
+                  } text-white`}
+                >
+                  {redeeming ? (
+                    <Spinner size={20} className="animate-spin mx-auto" />
+                  ) : tokenBalance < tokenCost ? (
+                    "Insufficient Tokens"
+                  ) : (
+                    "Subscribe Now"
+                  )}
+                </button>
+                
+                {tokenBalance < tokenCost && (
+                  <button
+                    onClick={() => navigate("/store")}
+                    className="py-2 px-4 bg-purple-600 text-white rounded-md hover:bg-purple-700 transition"
+                  >
+                    Get Tokens
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
+        </>
       )}
     </div>
   );

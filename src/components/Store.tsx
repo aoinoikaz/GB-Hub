@@ -2,12 +2,13 @@ import { useState, useEffect, useCallback } from "react";
 import { useAuth } from "../context/auth-context";
 import { useTheme } from "../context/theme-context";
 import { db, functions } from "../config/firebase";
-import { doc, getDoc, collection, getDocs, query, where, addDoc, updateDoc, serverTimestamp, orderBy } from "firebase/firestore";
+import { doc, getDoc, collection, getDocs, query, where, orderBy } from "firebase/firestore";
 import { httpsCallable } from "firebase/functions";
 import { PayPalButtons, usePayPalScriptReducer } from "@paypal/react-paypal-js";
-import { Spinner, Coin } from "phosphor-react";
+import { Spinner, Coin, CurrencyDollar, Handshake, Gift, Trophy, ArrowRight } from "phosphor-react";
 import { debounce } from "lodash";
 import { v4 as uuidv4 } from "uuid";
+import { useNavigate } from "react-router-dom";
 
 // Define the return type of the processTokenPurchase Cloud Function
 interface ProcessTokenPurchaseResponse {
@@ -76,14 +77,11 @@ interface Transaction {
 const Store = () => {
   const { user: authUser } = useAuth();
   const { theme } = useTheme();
+  const navigate = useNavigate();
   const [{ isPending, isResolved, isRejected }] = usePayPalScriptReducer();
   const [tokenBalance, setTokenBalance] = useState<number>(0);
   const [selectedTokenPackage, setSelectedTokenPackage] = useState<"60" | "120" | "600" | "1200" | null>(null);
   const [isCreatingOrder, setIsCreatingOrder] = useState<boolean>(false);
-  const [selectedProductType, setSelectedProductType] = useState<"subscription" | null>(null);
-  const [selectedProduct, setSelectedProduct] = useState<string | null>(null);
-  const [billingPeriod, setBillingPeriod] = useState<"monthly" | "yearly">("monthly");
-  const [duration, setDuration] = useState<"1" | "3" | "6" | "12">("1");
   const [tradeRecipientUsername, setTradeRecipientUsername] = useState<string>("");
   const [tradeRecipientExists, setTradeRecipientExists] = useState<boolean | null>(null);
   const [tradeAmount, setTradeAmount] = useState<string>("");
@@ -97,7 +95,7 @@ const Store = () => {
   const [currentPage, setCurrentPage] = useState<number>(1);
   const [transactionsPerPage, setTransactionsPerPage] = useState<number>(5);
   const [totalTransactions, setTotalTransactions] = useState<number>(0);
-  const [allTransactions, setAllTransactions] = useState<Transaction[]>([]); // Store all transactions for pagination
+  const [allTransactions, setAllTransactions] = useState<Transaction[]>([]);
 
   // Detect mobile screen size
   useEffect(() => {
@@ -163,7 +161,6 @@ const Store = () => {
     setIsLoadingHistory(true);
 
     try {
-      // Only fetch all transactions if it's the initial load or after a data change
       if (direction === "initial") {
         const tokenPurchasesRef = collection(db, `tokenPurchases`);
         const redemptionsRef = collection(db, `redemptions`);
@@ -220,7 +217,6 @@ const Store = () => {
 
         setAllTransactions(fetchedTransactions);
         setTotalTransactions(fetchedTransactions.length);
-        console.log(`Total transactions: ${fetchedTransactions.length}`);
       }
     } catch (err: unknown) {
       const errorMessage = err instanceof Error ? err.message : "Failed to fetch transaction history";
@@ -232,9 +228,9 @@ const Store = () => {
     }
   };
 
-  // Paginate the transactions whenever allTransactions, currentPage, or transactionsPerPage changes
+  // Paginate the transactions
   useEffect(() => {
-    if (allTransactions.length === 0) return; // Skip if no transactions are loaded yet
+    if (allTransactions.length === 0) return;
 
     const startIndex = (currentPage - 1) * transactionsPerPage;
     const endIndex = Math.min(startIndex + transactionsPerPage, allTransactions.length);
@@ -253,20 +249,14 @@ const Store = () => {
   const handleTransactionsPerPageChange = (event: React.ChangeEvent<HTMLSelectElement>) => {
     const newPerPage = parseInt(event.target.value);
     setTransactionsPerPage(newPerPage);
-    setCurrentPage(1); // Reset to page 1
+    setCurrentPage(1);
   };
 
   const tokenPackages = {
-    "60": { amount: "5.00", currency: "USD" },
-    "120": { amount: "10.00", currency: "USD" },
-    "600": { amount: "45.00", currency: "USD" },
-    "1200": { amount: "85.00", currency: "USD" },
-  };
-
-  const subscriptionCosts = {
-    basic: { monthly: 60, yearly: 600 },
-    standard: { monthly: 120, yearly: 1200 },
-    premium: { monthly: 180, yearly: 1800 },
+    "60": { amount: "5.00", currency: "USD", bonus: 0 },
+    "120": { amount: "10.00", currency: "USD", bonus: 0 },
+    "600": { amount: "45.00", currency: "USD", bonus: 60 }, // 10% bonus
+    "1200": { amount: "85.00", currency: "USD", bonus: 180 }, // 15% bonus
   };
 
   const handleCreateOrder = async (_data: any, actions: CustomCreateOrderActions) => {
@@ -341,7 +331,7 @@ const Store = () => {
 
       await fetchTokenBalance();
       setCurrentPage(1);
-      await fetchTransactionHistory("initial"); // Re-fetch transactions to include the new purchase
+      await fetchTransactionHistory("initial");
 
       setLoading(false);
       setSelectedTokenPackage(null);
@@ -361,52 +351,6 @@ const Store = () => {
     console.error("PayPal Button Error:", err);
     setLoading(false);
     localStorage.removeItem("sessionId");
-  };
-
-  const handleRedeemTokens = async () => {
-    if (!selectedProductType || !selectedProduct || !authUser) return;
-
-    setLoading(true);
-    setError(null);
-
-    try {
-      let tokenCost = 0;
-      let productId = selectedProduct;
-
-      if (selectedProductType === "subscription") {
-        tokenCost = subscriptionCosts[selectedProduct as "basic" | "standard" | "premium"][billingPeriod];
-      }
-
-      if (tokenBalance < tokenCost) {
-        throw new Error("Insufficient tokens to redeem this product");
-      }
-
-      const userRef = doc(db, `users/${authUser.uid}`);
-      await updateDoc(userRef, {
-        tokenBalance: tokenBalance - tokenCost,
-      });
-
-      await addDoc(collection(db, "redemptions"), {
-        userId: authUser.uid,
-        productType: selectedProductType,
-        productId,
-        tokenCost,
-        createdAt: serverTimestamp(),
-      });
-
-      await fetchTokenBalance();
-      setCurrentPage(1);
-      await fetchTransactionHistory("initial"); // Re-fetch transactions to include the new redemption
-
-      setLoading(false);
-      setSelectedProductType(null);
-      setSelectedProduct(null);
-    } catch (err: unknown) {
-      const errorMessage = err instanceof Error ? err.message : "Failed to redeem tokens";
-      setError(errorMessage);
-      console.error(err);
-      setLoading(false);
-    }
   };
 
   const handleTradeTokens = async () => {
@@ -438,7 +382,7 @@ const Store = () => {
 
       await fetchTokenBalance();
       setCurrentPage(1);
-      await fetchTransactionHistory("initial"); // Re-fetch transactions to include the new trade
+      await fetchTransactionHistory("initial");
 
       setLoading(false);
       setTradeRecipientUsername("");
@@ -452,41 +396,23 @@ const Store = () => {
     }
   };
 
-  const calculateTokensNeeded = () => {
-    if (!selectedProductType || !selectedProduct) return 0;
-
-    let tokenCost = 0;
-    if (selectedProductType === "subscription") {
-      const baseCost = subscriptionCosts[selectedProduct as "basic" | "standard" | "premium"][billingPeriod];
-      const durationMonths = parseInt(duration) * (billingPeriod === "yearly" ? 12 : 1);
-      tokenCost = baseCost * (durationMonths / (billingPeriod === "yearly" ? 12 : 1));
-    }
-
-    return tokenCost;
-  };
-
-  const tokensNeeded = calculateTokensNeeded();
   const totalPages = Math.ceil(totalTransactions / transactionsPerPage);
 
   const getPageNumbers = () => {
     const pages: (number | string)[] = [];
-    const maxButtonsToShow = 5; // Total buttons (including first/last pages and ellipses) on desktop
+    const maxButtonsToShow = 5;
 
     if (isMobile) {
-      // On mobile, we don't need page numbers since we'll show "Page X of Y"
       return [];
     } else {
-      // On desktop, show up to maxButtonsToShow buttons (including first/last pages and ellipses)
       if (totalPages <= maxButtonsToShow) {
         for (let i = 1; i <= totalPages; i++) pages.push(i);
       } else {
-        // Always include the first and last pages, so we have maxButtonsToShow - 2 slots for the main range and ellipses
-        const maxMainRange = maxButtonsToShow - 2; // Subtract 2 for first/last pages
+        const maxMainRange = maxButtonsToShow - 2;
         const half = Math.floor(maxMainRange / 2);
-        let leftBound = Math.max(2, currentPage - half); // Start after the first page
-        let rightBound = Math.min(totalPages - 1, currentPage + half); // End before the last page
+        let leftBound = Math.max(2, currentPage - half);
+        let rightBound = Math.min(totalPages - 1, currentPage + half);
 
-        // Adjust bounds to ensure the main range is exactly maxMainRange buttons
         const currentRangeSize = rightBound - leftBound + 1;
         if (currentRangeSize > maxMainRange) {
           if (currentPage <= half + 1) {
@@ -505,21 +431,18 @@ const Store = () => {
           }
         }
 
-        // Add the first page and ellipsis if needed
         pages.push(1);
         if (leftBound > 2) {
           pages.push("...");
         } else if (leftBound === 2) {
           pages.push(2);
-          leftBound = 3; // Avoid duplicating page 2
+          leftBound = 3;
         }
 
-        // Add the main range of pages
         for (let i = leftBound; i <= rightBound; i++) {
           pages.push(i);
         }
 
-        // Add the last page and ellipsis if needed, avoiding duplication
         if (rightBound < totalPages - 1) {
           pages.push("...");
           pages.push(totalPages);
@@ -536,231 +459,158 @@ const Store = () => {
     setCurrentPage(page);
   };
 
-  const referralCode = authUser?.uid || "N/A";
+  const referralCode = authUser?.uid?.slice(0, 8).toUpperCase() || "N/A";
 
   return (
     <div className={`min-h-screen p-6 ${theme === "dark" ? "bg-[#121212] text-gray-100" : "bg-gray-100 text-gray-900"}`}>
       <div className="max-w-4xl mx-auto">
-        <div className="flex items-center space-x-2 mb-6">
-          <Coin size={32} />
-          <h1 className="text-3xl font-bold">Your Token Balance: {tokenBalance}</h1>
+        {/* Header */}
+        <div className="mb-8 text-center">
+          <div className="flex items-center justify-center space-x-3 mb-4">
+            <Coin size={48} className="text-yellow-400" />
+            <h1 className="text-4xl font-bold">Token Store</h1>
+          </div>
+          <p className="text-gray-400 text-lg">Purchase, trade, and manage your tokens</p>
+          <div className="mt-4 p-4 bg-gray-800 rounded-lg inline-block">
+            <p className="text-2xl font-bold text-yellow-400">{tokenBalance} tokens</p>
+            <p className="text-gray-400 text-sm">Current Balance</p>
+          </div>
         </div>
 
-        {error && <p className="text-red-500 text-sm mb-4">{error}</p>}
+        {error && <p className="text-red-500 text-sm mb-4 text-center">{error}</p>}
 
-        {/* Token Calculator */}
-        <div className="mb-6 p-4 bg-[#1c1c1c] rounded-md shadow-lg">
-          <h2 className="text-xl font-semibold mb-4 text-white">Token Calculator</h2>
-          <div className="space-y-4">
-            <div>
-              <label className="block mb-1 text-gray-200">Product Type</label>
-              <select
-                value={selectedProductType || ""}
-                onChange={(e) => setSelectedProductType(e.target.value as "subscription" | null)}
-                className="w-full px-4 py-2 border rounded-md bg-gray-800 border-gray-600 text-white focus:ring-0 focus:outline-none focus:border-gray-500"
-              >
-                <option value="" disabled>Select a product type</option>
-                <option value="subscription">Media Subscription</option>
-              </select>
-            </div>
-            {selectedProductType && (
-              <div>
-                <label className="block mb-1 text-gray-200">Product</label>
-                <select
-                  value={selectedProduct || ""}
-                  onChange={(e) => setSelectedProduct(e.target.value)}
-                  className="w-full px-4 py-2 border rounded-md bg-gray-800 border-gray-600 text-white focus:ring-0 focus:outline-none focus:border-gray-500"
-                >
-                  <option value="" disabled>Select a product</option>
-                  {selectedProductType === "subscription" && (
-                    <>
-                      <option value="basic">Basic ({subscriptionCosts.basic[billingPeriod]} tokens)</option>
-                      <option value="standard">Standard ({subscriptionCosts.standard[billingPeriod]} tokens)</option>
-                      <option value="premium">Premium ({subscriptionCosts.premium[billingPeriod]} tokens)</option>
-                    </>
-                  )}
-                </select>
-              </div>
-            )}
-            {selectedProductType === "subscription" && selectedProduct && (
-              <>
-                <div>
-                  <label className="block mb-1 text-gray-200">Billing Period</label>
-                  <select
-                    value={billingPeriod}
-                    onChange={(e) => setBillingPeriod(e.target.value as "monthly" | "yearly")}
-                    className="w-full px-4 py-2 border rounded-md bg-gray-800 border-gray-600 text-white focus:ring-0 focus:outline-none focus:border-gray-500"
-                  >
-                    <option value="monthly">Monthly</option>
-                    <option value="yearly">Yearly</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="block mb-1 text-gray-200">Duration</label>
-                  <select
-                    value={duration}
-                    onChange={(e) => setDuration(e.target.value as "1" | "3" | "6" | "12")}
-                    className="w-full px-4 py-2 border rounded-md bg-gray-800 border-gray-600 text-white focus:ring-0 focus:outline-none focus:border-gray-500"
-                  >
-                    <option value="1">{billingPeriod === "monthly" ? "1 month" : "1 year"}</option>
-                    <option value="3">{billingPeriod === "monthly" ? "3 months" : "3 years"}</option>
-                    <option value="6">{billingPeriod === "monthly" ? "6 months" : "6 years"}</option>
-                    <option value="12">{billingPeriod === "monthly" ? "12 months" : "12 years"}</option>
-                  </select>
-                </div>
-              </>
-            )}
-            {tokensNeeded > 0 && (
-              <div>
-                <p className="text-gray-200">
-                  You need {tokensNeeded} tokens for {selectedProductType === "subscription" ? `${duration} ${billingPeriod === "monthly" ? "month(s)" : "year(s)"} of ${selectedProduct}` : selectedProduct}. 
-                  You have {tokenBalance} tokens—{tokenBalance >= tokensNeeded ? "you’re all set!" : `purchase ${tokensNeeded - tokenBalance} more.`}
-                </p>
-                {tokenBalance < tokensNeeded && (
-                  <button
-                    onClick={() => document.getElementById("token-purchase")?.scrollIntoView({ behavior: "smooth" })}
-                    className="mt-2 py-2 px-4 bg-gradient-to-r from-purple-500 to-pink-500 text-white rounded-md hover:opacity-90"
-                  >
-                    Purchase Tokens
-                  </button>
-                )}
-              </div>
-            )}
-          </div>
+        {/* Quick Actions */}
+        <div className="mb-8 grid grid-cols-1 md:grid-cols-3 gap-4">
+          <button
+            onClick={() => navigate("/media")}
+            className="p-4 bg-gradient-to-r from-purple-600 to-pink-600 rounded-lg hover:opacity-90 transition"
+          >
+            <h3 className="font-semibold mb-2 flex items-center justify-center">
+              <CurrencyDollar size={20} className="mr-2" />
+              Spend Tokens
+            </h3>
+            <p className="text-sm opacity-90">Subscribe to media plans</p>
+          </button>
+          
+          <button
+            onClick={() => document.getElementById("trade-tokens")?.scrollIntoView({ behavior: "smooth" })}
+            className="p-4 bg-gradient-to-r from-blue-600 to-purple-600 rounded-lg hover:opacity-90 transition"
+          >
+            <h3 className="font-semibold mb-2 flex items-center justify-center">
+              <Handshake size={20} className="mr-2" />
+              Trade Tokens
+            </h3>
+            <p className="text-sm opacity-90">Send tokens to friends</p>
+          </button>
+          
+          <button
+            onClick={() => navigate("/leaderboard")}
+            className="p-4 bg-gradient-to-r from-yellow-600 to-orange-600 rounded-lg hover:opacity-90 transition"
+          >
+            <h3 className="font-semibold mb-2 flex items-center justify-center">
+              <Trophy size={20} className="mr-2" />
+              Leaderboard
+            </h3>
+            <p className="text-sm opacity-90">View top contributors</p>
+          </button>
         </div>
 
         {/* Token Purchase */}
-        <div id="token-purchase" className="mb-6 p-4 bg-[#1c1c1c] rounded-md shadow-lg">
-          <h2 className="text-xl font-semibold mb-4 text-white">Purchase Tokens</h2>
-          <div className="space-y-4">
-            <div>
-              <label className="block mb-1 text-gray-200">Token Package</label>
-              <select
-                value={selectedTokenPackage || ""}
-                onChange={(e) => setSelectedTokenPackage(e.target.value as "60" | "120" | "600" | "1200")}
-                className="w-full px-4 py-2 border rounded-md bg-gray-800 border-gray-600 text-white focus:ring-0 focus:outline-none focus:border-gray-500"
+        <div id="token-purchase" className="mb-8 p-6 bg-[#1c1c1c] rounded-xl shadow-xl">
+          <h2 className="text-2xl font-bold mb-6 text-white flex items-center">
+            <CurrencyDollar size={28} className="mr-2 text-green-400" />
+            Purchase Tokens
+          </h2>
+          
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+            {Object.entries(tokenPackages).map(([tokens, pkg]) => (
+              <div
+                key={tokens}
+                onClick={() => setSelectedTokenPackage(tokens as "60" | "120" | "600" | "1200")}
+                className={`p-4 border-2 rounded-lg cursor-pointer transition ${
+                  selectedTokenPackage === tokens
+                    ? "border-purple-500 bg-purple-500/10"
+                    : "border-gray-600 hover:border-gray-500"
+                }`}
               >
-                <option value="" disabled>Select a token package</option>
-                <option value="60">60 Tokens ($5)</option>
-                <option value="120">120 Tokens ($10)</option>
-                <option value="600">600 Tokens ($45 - 10% discount)</option>
-                <option value="1200">1200 Tokens ($85 - 15% discount)</option>
-              </select>
-            </div>
-            {isPending && (
-              <div className="text-gray-200 text-center">
-                <Spinner size={24} className="animate-spin mx-auto" />
-                <p>Loading PayPal...</p>
-              </div>
-            )}
-            {isRejected && (
-              <div className="text-red-500 text-center">
-                <p>Error loading PayPal. Please refresh the page or try again later.</p>
-              </div>
-            )}
-            {selectedTokenPackage && isResolved && (
-              <div className="mt-4">
-                <PayPalButtons
-                  style={{
-                    shape: "rect",
-                    color: "blue",
-                    layout: "vertical",
-                    label: "pay",
-                  }}
-                  createOrder={handleCreateOrder}
-                  onApprove={handleOnApprove}
-                  onError={handleOnError}
-                  disabled={loading || isCreatingOrder}
-                />
-                {isCreatingOrder && (
-                  <div className="text-gray-200 text-center mt-2">
-                    <Spinner size={24} className="animate-spin mx-auto" />
-                    <p>Preparing Payment...</p>
+                <div className="flex justify-between items-start mb-2">
+                  <div>
+                    <p className="text-2xl font-bold text-white">{tokens} tokens</p>
+                    {pkg.bonus > 0 && (
+                      <p className="text-sm text-green-400">+{pkg.bonus} bonus tokens!</p>
+                    )}
                   </div>
+                  <p className="text-xl font-semibold text-green-400">${pkg.amount}</p>
+                </div>
+                {pkg.bonus > 0 && (
+                  <p className="text-sm text-gray-400">
+                    {Math.round((pkg.bonus / parseInt(tokens)) * 100)}% discount
+                  </p>
                 )}
               </div>
-            )}
-            <p className="text-gray-200 text-sm text-center mt-4">
-              Token purchases are non-refundable once completed. By purchasing tokens, you agree to our{" "}
-              <a href="/terms" className="text-purple-500 hover:text-purple-400 underline">Terms of Service</a>{" "}
-              and{" "}
-              <a href="/refund-policy" className="text-purple-500 hover:text-purple-400 underline">Refund Policy</a>.
-            </p>
+            ))}
           </div>
-        </div>
 
-        {/* Redeem Tokens */}
-        <div className="mb-6 p-4 bg-[#1c1c1c] rounded-md shadow-lg">
-          <h2 className="text-xl font-semibold mb-4 text-white">Redeem Tokens</h2>
-          <div className="space-y-4">
-            <div>
-              <label className="block mb-1 text-gray-200">Product Type</label>
-              <select
-                value={selectedProductType || ""}
-                onChange={(e) => setSelectedProductType(e.target.value as "subscription" | null)}
-                className="w-full px-4 py-2 border rounded-md bg-gray-800 border-gray-600 text-white focus:ring-0 focus:outline-none focus:border-gray-500"
-              >
-                <option value="" disabled>Select a product type</option>
-                <option value="subscription">Media Subscription</option>
-              </select>
+          {isPending && (
+            <div className="text-gray-200 text-center">
+              <Spinner size={24} className="animate-spin mx-auto" />
+              <p>Loading PayPal...</p>
             </div>
-            {selectedProductType && (
-              <div>
-                <label className="block mb-1 text-gray-200">Product</label>
-                <select
-                  value={selectedProduct || ""}
-                  onChange={(e) => setSelectedProduct(e.target.value)}
-                  className="w-full px-4 py-2 border rounded-md bg-gray-800 border-gray-600 text-white focus:ring-0 focus:outline-none focus:border-gray-500"
-                >
-                  <option value="" disabled>Select a product</option>
-                  {selectedProductType === "subscription" && (
-                    <>
-                      <option value="basic">Basic ({subscriptionCosts.basic[billingPeriod]} tokens)</option>
-                      <option value="standard">Standard ({subscriptionCosts.standard[billingPeriod]} tokens)</option>
-                      <option value="premium">Premium ({subscriptionCosts.premium[billingPeriod]} tokens)</option>
-                    </>
-                  )}
-                </select>
-              </div>
-            )}
-            {selectedProductType === "subscription" && selectedProduct && (
-              <div>
-                <label className="block mb-1 text-gray-200">Billing Period</label>
-                <select
-                  value={billingPeriod}
-                  onChange={(e) => setBillingPeriod(e.target.value as "monthly" | "yearly")}
-                  className="w-full px-4 py-2 border rounded-md bg-gray-800 border-gray-600 text-white focus:ring-0 focus:outline-none focus:border-gray-500"
-                >
-                  <option value="monthly">Monthly</option>
-                  <option value="yearly">Yearly</option>
-                </select>
-              </div>
-            )}
-            <button
-              onClick={handleRedeemTokens}
-              disabled={loading || !selectedProductType || !selectedProduct}
-              className={`w-full py-2 px-4 bg-gradient-to-r from-purple-500 to-pink-500 text-white rounded-md transition ${
-                loading || !selectedProductType || !selectedProduct ? "opacity-90 cursor-not-allowed" : "hover:opacity-90"
-              }`}
-            >
-              {loading ? <Spinner size={20} className="animate-spin mx-auto" /> : "Redeem Tokens"}
-            </button>
-          </div>
+          )}
+          
+          {isRejected && (
+            <div className="text-red-500 text-center">
+              <p>Error loading PayPal. Please refresh the page or try again later.</p>
+            </div>
+          )}
+          
+          {selectedTokenPackage && isResolved && (
+            <div className="mt-4">
+              <PayPalButtons
+                style={{
+                  shape: "rect",
+                  color: "blue",
+                  layout: "vertical",
+                  label: "pay",
+                }}
+                createOrder={handleCreateOrder}
+                onApprove={handleOnApprove}
+                onError={handleOnError}
+                disabled={loading || isCreatingOrder}
+              />
+              {isCreatingOrder && (
+                <div className="text-gray-200 text-center mt-2">
+                  <Spinner size={24} className="animate-spin mx-auto" />
+                  <p>Preparing Payment...</p>
+                </div>
+              )}
+            </div>
+          )}
+          
+          <p className="text-gray-400 text-xs text-center mt-4">
+            Token purchases are non-refundable. By purchasing, you agree to our{" "}
+            <a href="/terms" className="text-purple-400 hover:text-purple-300 underline">Terms</a>{" "}
+            and{" "}
+            <a href="/refund-policy" className="text-purple-400 hover:text-purple-300 underline">Refund Policy</a>.
+          </p>
         </div>
 
         {/* Trade Tokens */}
-        <div className="mb-6 p-4 bg-[#1c1c1c] rounded-md shadow-lg">
-          <h2 className="text-xl font-semibold mb-4 text-white">Trade Tokens</h2>
+        <div id="trade-tokens" className="mb-8 p-6 bg-[#1c1c1c] rounded-xl shadow-xl">
+          <h2 className="text-2xl font-bold mb-6 text-white flex items-center">
+            <Handshake size={28} className="mr-2 text-blue-400" />
+            Trade Tokens
+          </h2>
           <div className="space-y-4">
             <div className="relative">
-              <label className="block mb-1 text-gray-200">Recipient Username</label>
+              <label className="block mb-2 text-gray-300">Recipient Username</label>
               <div className="relative">
                 <input
                   type="text"
                   value={tradeRecipientUsername}
                   onChange={(e) => setTradeRecipientUsername(e.target.value)}
                   placeholder="Enter username to trade with"
-                  className="w-full px-4 py-2 border rounded-md bg-gray-800 border-gray-600 text-white focus:ring-0 focus:outline-none focus:border-gray-500 pr-10"
+                  className="w-full px-4 py-2 border rounded-md bg-gray-800 border-gray-600 text-white focus:ring-2 focus:ring-purple-500 focus:outline-none pr-10"
                   disabled={loading}
                 />
                 {tradeRecipientExists !== null && (
@@ -775,139 +625,185 @@ const Store = () => {
               </div>
             </div>
             <div>
-              <label className="block mb-1 text-gray-200">Number of Tokens</label>
+              <label className="block mb-2 text-gray-300">Number of Tokens</label>
               <input
                 type="number"
                 value={tradeAmount}
                 onChange={(e) => setTradeAmount(e.target.value)}
                 placeholder="Enter number of tokens to trade"
-                className="w-full px-4 py-2 border rounded-md bg-gray-800 border-gray-600 text-white focus:ring-0 focus:outline-none focus:border-gray-500"
+                className="w-full px-4 py-2 border rounded-md bg-gray-800 border-gray-600 text-white focus:ring-2 focus:ring-purple-500 focus:outline-none"
                 disabled={loading}
+                min="1"
+                max={tokenBalance}
               />
+              {tradeAmount && parseInt(tradeAmount) > tokenBalance && (
+                <p className="text-red-400 text-sm mt-1">You only have {tokenBalance} tokens</p>
+              )}
             </div>
             <button
               onClick={handleTradeTokens}
               disabled={loading || !tradeRecipientUsername || !tradeAmount || parseInt(tradeAmount) <= 0 || parseInt(tradeAmount) > tokenBalance || !tradeRecipientExists}
-              className={`w-full py-2 px-4 bg-gradient-to-r from-purple-500 to-pink-500 text-white rounded-md transition ${
-                loading || !tradeRecipientUsername || !tradeAmount || parseInt(tradeAmount) <= 0 || parseInt(tradeAmount) > tokenBalance || !tradeRecipientExists ? "opacity-90 cursor-not-allowed" : "hover:opacity-90"
-              }`}
+              className={`w-full py-3 px-4 rounded-md font-semibold transition flex items-center justify-center ${
+                loading || !tradeRecipientUsername || !tradeAmount || parseInt(tradeAmount) <= 0 || parseInt(tradeAmount) > tokenBalance || !tradeRecipientExists 
+                  ? "bg-gray-600 cursor-not-allowed opacity-50" 
+                  : "bg-gradient-to-r from-blue-500 to-purple-500 hover:opacity-90"
+              } text-white`}
             >
-              {loading ? <Spinner size={20} className="animate-spin mx-auto" /> : "Send Tokens"}
+              {loading ? (
+                <Spinner size={20} className="animate-spin" />
+              ) : (
+                <>
+                  <ArrowRight size={20} className="mr-2" />
+                  Send Tokens
+                </>
+              )}
             </button>
           </div>
         </div>
 
         {/* Transaction History */}
-        <div className="mb-6 p-4 bg-[#1c1c1c] rounded-md shadow-lg">
-          <div className="flex justify-between items-center mb-4">
-            <h2 className="text-xl font-semibold text-white">Transaction History</h2>
+        <div className="mb-8 p-6 bg-[#1c1c1c] rounded-xl shadow-xl">
+          <div className="flex justify-between items-center mb-6">
+            <h2 className="text-2xl font-bold text-white">Transaction History</h2>
             <div className="flex items-center space-x-2">
-              <label className="text-gray-200">Show:</label>
+              <label className="text-gray-300">Show:</label>
               <select
                 value={transactionsPerPage}
                 onChange={handleTransactionsPerPageChange}
-                className="px-2 py-1 border rounded-md bg-gray-800 border-gray-600 text-white focus:ring-0 focus:outline-none focus:border-gray-500"
+                className="px-2 py-1 border rounded-md bg-gray-800 border-gray-600 text-white focus:ring-2 focus:ring-purple-500 focus:outline-none"
               >
                 <option value={5}>5</option>
                 <option value={10}>10</option>
                 <option value={25}>25</option>
                 <option value={50}>50</option>
-                <option value={100}>100</option>
               </select>
             </div>
           </div>
+          
           <div className="space-y-2">
             {isLoadingHistory ? (
-              <p className="text-gray-200 text-center py-4">Loading transactions...</p>
+              <div className="text-gray-200 text-center py-8">
+                <Spinner size={32} className="animate-spin mx-auto mb-2" />
+                <p>Loading transactions...</p>
+              </div>
             ) : transactionHistory.length > 0 ? (
               transactionHistory.map((tx) => (
-                <div key={tx.id} className="p-2 bg-gray-800 rounded-md">
-                  <p className="text-gray-200">
-                    {tx.type === "purchase" && `Purchased ${tx.tokens} tokens on ${tx.createdAt.toLocaleString("en-US", { year: "numeric", month: "short", day: "numeric", hour: "numeric", minute: "numeric", hour12: true })}`}
-                    {tx.type === "redemption" && `Redeemed ${tx.productType} (${tx.productId}) for ${tx.tokenCost} tokens on ${tx.createdAt.toLocaleString("en-US", { year: "numeric", month: "short", day: "numeric", hour: "numeric", minute: "numeric", hour12: true })}`}
-                    {tx.type === "trade" && tx.direction === "sent" && `Sent ${tx.tokens} tokens to user ${tx.receiverUsername || tx.receiverId} on ${tx.createdAt.toLocaleString("en-US", { year: "numeric", month: "short", day: "numeric", hour: "numeric", minute: "numeric", hour12: true })}`}
-                    {tx.type === "trade" && tx.direction === "received" && `Received ${tx.tokens} tokens from user ${tx.senderUsername || tx.senderId} on ${tx.createdAt.toLocaleString("en-US", { year: "numeric", month: "short", day: "numeric", hour: "numeric", minute: "numeric", hour12: true })}`}
-                  </p>
+                <div key={tx.id} className="p-3 bg-gray-800 rounded-lg hover:bg-gray-700 transition">
+                  <div className="flex justify-between items-start">
+                    <div>
+                      <p className="text-gray-200 font-medium">
+                        {tx.type === "purchase" && `Purchased ${tx.tokens} tokens`}
+                        {tx.type === "redemption" && `Subscribed to ${tx.productId} plan`}
+                        {tx.type === "trade" && tx.direction === "sent" && `Sent ${tx.tokens} tokens to ${tx.receiverUsername || "user"}`}
+                        {tx.type === "trade" && tx.direction === "received" && `Received ${tx.tokens} tokens from ${tx.senderUsername || "user"}`}
+                      </p>
+                      <p className="text-gray-400 text-sm">
+                        {tx.createdAt.toLocaleString("en-US", { 
+                          month: "short", 
+                          day: "numeric", 
+                          hour: "numeric", 
+                          minute: "numeric" 
+                        })}
+                      </p>
+                    </div>
+                    <div className="text-right">
+                      {tx.type === "purchase" && (
+                        <span className="text-green-400 font-semibold">+{tx.tokens}</span>
+                      )}
+                      {tx.type === "redemption" && (
+                        <span className="text-red-400 font-semibold">-{tx.tokenCost}</span>
+                      )}
+                      {tx.type === "trade" && tx.direction === "sent" && (
+                        <span className="text-red-400 font-semibold">-{tx.tokens}</span>
+                      )}
+                      {tx.type === "trade" && tx.direction === "received" && (
+                        <span className="text-green-400 font-semibold">+{tx.tokens}</span>
+                      )}
+                    </div>
+                  </div>
                 </div>
               ))
             ) : (
-              <p className="text-gray-200 text-center py-4">No transactions yet.</p>
+              <p className="text-gray-400 text-center py-8">No transactions yet.</p>
             )}
           </div>
+          
           {totalTransactions > 0 && (
-            <div className="flex flex-col items-center mt-4 space-y-2">
-              <div className="flex justify-between items-center w-full sm:w-auto sm:space-x-1">
-                <button
-                  onClick={() => {
-                    const newPage = Math.max(currentPage - 1, 1);
-                    setCurrentPage(newPage);
-                  }}
-                  disabled={currentPage === 1 || isLoadingHistory}
-                  className={`py-2 px-4 rounded-md text-white sm:px-2 sm:py-1 sm:text-sm ${currentPage === 1 || isLoadingHistory ? "bg-gray-500 cursor-not-allowed" : "bg-gradient-to-r from-purple-500 to-pink-500 hover:opacity-90"}`}
-                >
-                  Back
-                </button>
-                {isMobile ? (
-                  <span className="text-gray-200 text-sm py-1">
-                    Page {currentPage} of {totalPages}
-                  </span>
-                ) : (
-                  <div className="flex space-x-1 sm:space-x-1">
-                    {getPageNumbers().map((page, index) => (
-                      <button
-                        key={index}
-                        onClick={() => {
-                          if (typeof page === "number") {
-                            handlePageChange(page);
-                          }
-                        }}
-                        className={`py-1 px-3 rounded-md sm:px-2 sm:text-xs ${typeof page === "number" && page === currentPage ? "bg-purple-500 text-white" : "bg-gray-700 text-gray-200 hover:bg-gray-600"} ${typeof page === "string" ? "cursor-default" : ""}`}
-                        disabled={typeof page === "string" || isLoadingHistory}
-                      >
-                        {page}
-                      </button>
-                    ))}
-                  </div>
-                )}
-                <button
-                  onClick={() => {
-                    const newPage = Math.min(currentPage + 1, totalPages);
-                    setCurrentPage(newPage);
-                  }}
-                  disabled={currentPage === totalPages || isLoadingHistory}
-                  className={`py-2 px-4 rounded-md text-white sm:px-2 sm:py-1 sm:text-sm ${currentPage === totalPages || isLoadingHistory ? "bg-gray-500 cursor-not-allowed" : "bg-gradient-to-r from-purple-500 to-pink-500 hover:opacity-90"}`}
-                >
-                  Next
-                </button>
-              </div>
+            <div className="flex justify-center items-center mt-6 space-x-2">
+              <button
+                onClick={() => setCurrentPage(Math.max(currentPage - 1, 1))}
+                disabled={currentPage === 1 || isLoadingHistory}
+                className={`py-2 px-4 rounded-md text-white ${
+                  currentPage === 1 || isLoadingHistory 
+                    ? "bg-gray-600 cursor-not-allowed" 
+                    : "bg-purple-600 hover:bg-purple-700"
+                }`}
+              >
+                Back
+              </button>
+              
+              {isMobile ? (
+                <span className="text-gray-200 text-sm py-1">
+                  Page {currentPage} of {totalPages}
+                </span>
+              ) : (
+                <div className="flex space-x-1">
+                  {getPageNumbers().map((page, index) => (
+                    <button
+                      key={index}
+                      onClick={() => typeof page === "number" && handlePageChange(page)}
+                      className={`py-1 px-3 rounded-md ${
+                        typeof page === "number" && page === currentPage 
+                          ? "bg-purple-600 text-white" 
+                          : "bg-gray-700 text-gray-200 hover:bg-gray-600"
+                      } ${typeof page === "string" ? "cursor-default" : ""}`}
+                      disabled={typeof page === "string" || isLoadingHistory}
+                    >
+                      {page}
+                    </button>
+                  ))}
+                </div>
+              )}
+              
+              <button
+                onClick={() => setCurrentPage(Math.min(currentPage + 1, totalPages))}
+                disabled={currentPage === totalPages || isLoadingHistory}
+                className={`py-2 px-4 rounded-md text-white ${
+                  currentPage === totalPages || isLoadingHistory 
+                    ? "bg-gray-600 cursor-not-allowed" 
+                    : "bg-purple-600 hover:bg-purple-700"
+                }`}
+              >
+                Next
+              </button>
             </div>
           )}
         </div>
 
         {/* Community Features */}
-        <div className="mb-6 p-4 bg-gradient-to-r from-blue-500 to-purple-500 rounded-md shadow-lg">
-          <h2 className="text-xl font-semibold mb-4 text-white">Community Features</h2>
-          <div className="space-y-4">
-            <div className="p-2 bg-[#1c1c1c] rounded-md">
-              <p className="text-gray-200">Enter our giveaway to win 600 tokens!</p>
-              <button className="mt-2 py-2 px-4 bg-gradient-to-r from-purple-500 to-pink-500 text-white rounded-md hover:opacity-90">
+        <div className="p-6 bg-gradient-to-r from-purple-900/50 to-pink-900/50 rounded-xl shadow-xl">
+          <h2 className="text-2xl font-bold mb-6 text-white flex items-center">
+            <Gift size={28} className="mr-2" />
+            Community Features
+          </h2>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="p-4 bg-black/30 rounded-lg">
+              <h3 className="font-semibold mb-2 text-purple-300">🎁 Monthly Giveaway</h3>
+              <p className="text-gray-300 text-sm mb-3">Win up to 600 tokens every month!</p>
+              <button className="py-2 px-4 bg-purple-600 hover:bg-purple-700 text-white rounded-md text-sm transition">
                 Enter Giveaway
               </button>
             </div>
-            <div className="p-2 bg-[#1c1c1c] rounded-md">
-              <p className="text-gray-200">Top Token Traders This Month:</p>
-              <ul className="list-disc list-inside text-gray-200">
-                <li>1. User123: 500 tokens traded</li>
-                <li>2. User456: 300 tokens traded</li>
-                <li>3. User789: 200 tokens traded</li>
-              </ul>
-            </div>
-            <div className="p-2 bg-[#1c1c1c] rounded-md">
-              <p className="text-gray-200">
-                Invite a friend and earn 30 tokens! Your referral code: {referralCode}
-              </p>
-              <button className="mt-2 py-2 px-4 bg-gradient-to-r from-purple-500 to-pink-500 text-white rounded-md hover:opacity-90">
-                Copy Referral Code
+            
+            <div className="p-4 bg-black/30 rounded-lg">
+              <h3 className="font-semibold mb-2 text-pink-300">💝 Referral Program</h3>
+              <p className="text-gray-300 text-sm mb-1">Your code: <span className="font-mono bg-gray-800 px-2 py-1 rounded">{referralCode}</span></p>
+              <p className="text-gray-400 text-xs mb-3">Earn 30 tokens for each friend who joins!</p>
+              <button 
+                onClick={() => navigator.clipboard.writeText(referralCode)}
+                className="py-2 px-4 bg-pink-600 hover:bg-pink-700 text-white rounded-md text-sm transition"
+              >
+                Copy Code
               </button>
             </div>
           </div>

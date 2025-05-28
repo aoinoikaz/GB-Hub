@@ -138,6 +138,66 @@ const MediaDashboard = () => {
           </p>
         </div>
       )}
+
+      {/* Subscription Plans Information */}
+      {isLinked && (
+        <div className="mt-8 p-6 bg-gray-800 rounded-lg">
+          <h2 className="text-2xl font-bold mb-4">Subscription Plans</h2>
+          <p className="text-gray-300 mb-6">
+            Upgrade your plan to unlock more features. All plans include full access to our media library.
+          </p>
+          
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            {/* Basic Plan */}
+            <div className="p-4 border border-gray-600 rounded-lg">
+              <h3 className="text-xl font-semibold text-blue-400 mb-2">Basic</h3>
+              <p className="text-2xl font-bold mb-2">60 tokens/month</p>
+              <p className="text-sm text-gray-400 mb-4">600 tokens/year (save 120 tokens)</p>
+              <ul className="text-sm text-gray-300 space-y-1">
+                <li>• Full media library access</li>
+                <li>• 2 simultaneous streams</li>
+                <li>• Standard support</li>
+              </ul>
+            </div>
+
+            {/* Standard Plan */}
+            <div className="p-4 border-2 border-purple-500 rounded-lg relative">
+              <div className="absolute -top-3 left-1/2 transform -translate-x-1/2 bg-purple-500 text-white px-3 py-1 rounded-full text-xs">
+                Most Popular
+              </div>
+              <h3 className="text-xl font-semibold text-purple-400 mb-2">Standard</h3>
+              <p className="text-2xl font-bold mb-2">120 tokens/month</p>
+              <p className="text-sm text-gray-400 mb-4">1200 tokens/year (save 240 tokens)</p>
+              <ul className="text-sm text-gray-300 space-y-1">
+                <li>• Full media library access</li>
+                <li>• 4 simultaneous streams</li>
+                <li>• Priority support</li>
+                <li>• Request priority</li>
+              </ul>
+            </div>
+
+            {/* Premium Plan */}
+            <div className="p-4 border border-gray-600 rounded-lg">
+              <h3 className="text-xl font-semibold text-pink-400 mb-2">Premium</h3>
+              <p className="text-2xl font-bold mb-2">180 tokens/month</p>
+              <p className="text-sm text-gray-400 mb-4">1800 tokens/year (save 360 tokens)</p>
+              <ul className="text-sm text-gray-300 space-y-1">
+                <li>• Full media library access</li>
+                <li>• 6 simultaneous streams</li>
+                <li>• Premium support</li>
+                <li>• Highest request priority</li>
+                <li>• Early access features</li>
+              </ul>
+            </div>
+          </div>
+
+          <div className="mt-6 text-center">
+            <p className="text-gray-400">
+              Visit the <a href="/store" className="text-purple-400 hover:text-purple-300 underline">Store</a> to purchase tokens and subscribe to a plan.
+            </p>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

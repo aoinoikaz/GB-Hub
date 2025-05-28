@@ -175,7 +175,7 @@ const MediaDashboard = () => {
 
   const handleActivate = async () => {
     if (!user) return;
-    setActivating(true);
+    setActivating(activating);
     setError(null);
 
     try {

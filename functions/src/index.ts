@@ -3,6 +3,7 @@ import * as admin from "firebase-admin";
 import * as fs from "fs";
 import * as path from "path";
 import * as os from "os";
+import { getAllSecrets } from './secrets';
 
 // Initialize Firebase Admin SDK
 if (!admin.apps.length) {
@@ -11,10 +12,63 @@ if (!admin.apps.length) {
   });
 }
 
-const EMBY_API_KEY: string = process.env.EMBY_API_KEY || "";
+// Initialize secrets
+let secrets: {
+  EMBY_API_KEY: string;
+  PAYPAL_CLIENT_ID: string;
+  PAYPAL_SECRET: string;
+  PAYPAL_API_BASE: string;
+  PAYPAL_CLIENT_ID_SANDBOX: string;
+  PAYPAL_SECRET_SANDBOX: string;
+  PAYPAL_API_BASE_SANDBOX: string;
+} | null = null;
+
+async function getSecretsConfig() {
+  if (!secrets) {
+    secrets = await getAllSecrets();
+  }
+  return secrets;
+}
+
+// These will be populated from secrets
+let EMBY_API_KEY: string = "";
+let PAYPAL_CLIENT_ID: string = "";
+let PAYPAL_SECRET: string = "";
+let PAYPAL_API_BASE: string = "";
+let PAYPAL_CLIENT_ID_SANDBOX: string = "";
+let PAYPAL_SECRET_SANDBOX: string = "";
+let PAYPAL_API_BASE_SANDBOX: string = "";
+
+// Determine if we're in sandbox mode (you can set this via environment variable)
+const IS_PAYPAL_SANDBOX = process.env.PAYPAL_SANDBOX === 'true';
+
+// Initialize secrets on cold start
+(async () => {
+  try {
+    const config = await getSecretsConfig();
+    EMBY_API_KEY = config.EMBY_API_KEY;
+    
+    // Set PayPal credentials based on environment
+    if (IS_PAYPAL_SANDBOX) {
+      PAYPAL_CLIENT_ID = config.PAYPAL_CLIENT_ID_SANDBOX;
+      PAYPAL_SECRET = config.PAYPAL_SECRET_SANDBOX;
+      PAYPAL_API_BASE = config.PAYPAL_API_BASE_SANDBOX;
+      console.log('Using PayPal SANDBOX credentials');
+    } else {
+      PAYPAL_CLIENT_ID = config.PAYPAL_CLIENT_ID;
+      PAYPAL_SECRET = config.PAYPAL_SECRET;
+      PAYPAL_API_BASE = config.PAYPAL_API_BASE;
+      console.log('Using PayPal PRODUCTION credentials');
+    }
+    
+    console.log('Secrets loaded successfully');
+  } catch (error) {
+    console.error('Failed to load secrets:', error);
+  }
+})();
+
 const EMBY_BASE_URL: string = "https://media.gondolabros.com";
 const BUCKET = admin.storage().bucket();
-
 
 const SUBSCRIPTION_PLANS: { [key: string]: SubscriptionPlan } = {
   basic: { monthly: 40, yearly: 400 },

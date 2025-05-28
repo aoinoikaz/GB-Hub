@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { doc, getDoc, addDoc, collection, serverTimestamp, updateDoc } from "firebase/firestore";
 import { db } from "../config/firebase";
 import { useAuth } from "../context/auth-context";
-import { Info, Spinner, Monitor, Download, FilmSlate, Users, Crown, Star, Check, X } from "phosphor-react";
+import { Info, Spinner, Monitor, Download, FilmSlate, Television, Users, Crown, Star, Check, X } from "phosphor-react";
 import { getFunctions, httpsCallable } from "firebase/functions";
 import { useNavigate } from "react-router-dom";
 
@@ -423,15 +423,19 @@ const MediaDashboard = () => {
                         ? "No movie requests"
                         : plan.features.movieRequests === "unlimited"
                         ? "Unlimited movie requests"
-                        : `${plan.features.movieRequests} movie request${plan.features.movieRequests > 1 ? "s" : ""}`}
+                        : billingPeriod === "monthly"
+                        ? `${plan.features.movieRequests} movie request${plan.features.movieRequests > 1 ? "s" : ""}/month`
+                        : `${plan.features.movieRequests * 12} movie requests/year`}
                     </li>
                     <li className="flex items-center">
-                      <FilmSlate size={16} className="mr-2 text-gray-400" />
+                      <Television size={16} className="mr-2 text-gray-400" />
                       {plan.features.tvRequests === 0
                         ? "No TV requests"
                         : plan.features.tvRequests === "unlimited"
                         ? "Unlimited TV requests"
-                        : `${plan.features.tvRequests} TV show${plan.features.tvRequests > 1 ? "s" : ""}`}
+                        : billingPeriod === "monthly"
+                        ? `${plan.features.tvRequests} TV show${plan.features.tvRequests > 1 ? "s" : ""}/month`
+                        : `${plan.features.tvRequests * 12} TV shows/year`}
                     </li>
                     <li className="flex items-center">
                       {plan.features.support === "priority" ? (

@@ -885,7 +885,6 @@ exports.processTokenPurchase = onCall<ProcessTokenPurchaseData, Promise<ProcessT
   }
 );
 
-// processTokenTrade remains unchanged as it doesn't use PayPal
 
 exports.createTipOrder = onCall<CreateTipOrderData, Promise<CreateTipOrderResponse>>(async (request) => {
   const { userId, sessionId, amount, currency } = request.data;
@@ -1078,3 +1077,550 @@ exports.processTip = onCall<ProcessTipData, Promise<ProcessTipResponse>>(async (
 });
 
 // processSubscription and checkSubscriptionStatus remain unchanged as they don't use external secrets
+
+// ... previous code up to line 932 (processTip function) ...
+
+exports.processTokenTrade = onCall<ProcessTokenTradeData, Promise<ProcessTokenTradeResponse>>(
+  async (request) => {
+    const { senderId, receiverUsername, tokens } = request.data;
+    const auth = request.auth;
+
+    if (!auth) {
+      throw new HttpsError("unauthenticated", "User must be authenticated to trade tokens.");
+    }
+
+    if (auth.uid !== senderId) {
+      throw new HttpsError("permission-denied", "Sender ID does not match authenticated user.");
+    }
+
+    if (!senderId || !receiverUsername || !tokens) {
+      throw new HttpsError("invalid-argument", "Missing required fields: senderId, receiverUsername, tokens.");
+    }
+
+    if (typeof tokens !== "number" || tokens <= 0) {
+      throw new HttpsError("invalid-argument", "Tokens must be a positive number.");
+    }
+
+    try {
+      const receiverQuery = admin
+        .firestore()
+        .collection("users")
+        .where("username", "==", receiverUsername)
+        .limit(1);
+      const receiverSnapshot = await receiverQuery.get();
+
+      if (receiverSnapshot.empty) {
+        throw new HttpsError("not-found", "Receiver username not found.");
+      }
+
+      const receiverDoc = receiverSnapshot.docs[0];
+      const receiverId = receiverDoc.id;
+
+      const result = await admin.firestore().runTransaction(async (transaction) => {
+        const senderRef = admin.firestore().doc(`users/${senderId}`);
+        const receiverRef = admin.firestore().doc(`users/${receiverId}`);
+
+        const senderDoc = await transaction.get(senderRef);
+        const receiverDoc = await transaction.get(receiverRef);
+
+        if (!senderDoc.exists) {
+          throw new HttpsError("not-found", "Sender not found in Firestore.");
+        }
+        if (!receiverDoc.exists) {
+          throw new HttpsError("not-found", "Receiver not found in Firestore.");
+        }
+
+        const senderData = senderDoc.data() as UserDocumentData;
+        const receiverData = receiverDoc.data() as UserDocumentData;
+
+        const senderBalance = senderData.tokenBalance || 0;
+        if (senderBalance < tokens) {
+          throw new HttpsError("failed-precondition", "Insufficient tokens for trade.");
+        }
+
+        transaction.update(senderRef, {
+          tokenBalance: admin.firestore.FieldValue.increment(-tokens),
+        });
+        transaction.update(receiverRef, {
+          tokenBalance: admin.firestore.FieldValue.increment(tokens),
+        });
+
+        const tradeRef = admin.firestore().collection("trades").doc();
+        transaction.set(tradeRef, {
+          senderId,
+          senderUsername: senderData.username,
+          receiverId,
+          receiverUsername: receiverData.username,
+          tokens,
+          createdAt: admin.firestore.FieldValue.serverTimestamp(),
+        });
+
+        return { success: true };
+      });
+
+      return result;
+    } catch (error: unknown) {
+      console.error("Error in processTokenTrade:", error);
+      const errorMessage = error instanceof Error ? error.message : "Unknown error";
+      throw new HttpsError("internal", `Failed to process token trade: ${errorMessage}`);
+    }
+  }
+);
+
+exports.processSubscription = onCall<ProcessSubscriptionData, Promise<ProcessSubscriptionResponse>>(
+  async (request) => {
+    const { userId, planId, billingPeriod, duration } = request.data;
+    const auth = request.auth;
+
+    if (!auth || auth.uid !== userId) {
+      throw new HttpsError("unauthenticated", "User must be authenticated.");
+    }
+
+    if (!userId || !planId || !billingPeriod || !duration) {
+      throw new HttpsError("invalid-argument", "Missing required fields.");
+    }
+
+    if (!SUBSCRIPTION_PLANS[planId]) {
+      throw new HttpsError("invalid-argument", "Invalid plan ID.");
+    }
+
+    if (billingPeriod !== "monthly" && billingPeriod !== "yearly") {
+      throw new HttpsError("invalid-argument", "Billing period must be 'monthly' or 'yearly'.");
+    }
+
+    if (typeof duration !== "number" || duration <= 0) {
+      throw new HttpsError("invalid-argument", "Duration must be a positive number.");
+    }
+
+    try {
+      const plan = SUBSCRIPTION_PLANS[planId];
+      const baseTokenCost = billingPeriod === "monthly" ? plan.monthly : plan.yearly;
+      const totalTokenCost = baseTokenCost * duration;
+
+      const result = await admin.firestore().runTransaction(async (transaction) => {
+        const userRef = admin.firestore().doc(`users/${userId}`);
+        const userDoc = await transaction.get(userRef);
+
+        if (!userDoc.exists) {
+          throw new HttpsError("not-found", "User not found.");
+        }
+
+        const userData = userDoc.data();
+        const currentBalance = userData?.tokenBalance || 0;
+
+        if (currentBalance < totalTokenCost) {
+          throw new HttpsError("failed-precondition", "Insufficient tokens.");
+        }
+
+        // Check for existing active subscription
+        const activeSubQuery = admin
+          .firestore()
+          .collection("subscriptions")
+          .where("userId", "==", userId)
+          .where("status", "==", "active");
+        const activeSubSnapshot = await transaction.get(activeSubQuery);
+
+        let startDate = new Date();
+        if (!activeSubSnapshot.empty) {
+          // If there's an active subscription, start the new one after it ends
+          const activeSub = activeSubSnapshot.docs[0].data();
+          const activeEndDate = activeSub.endDate.toDate();
+          if (activeEndDate > startDate) {
+            startDate = activeEndDate;
+          }
+
+          // Update the current subscription to not auto-renew
+          transaction.update(activeSubSnapshot.docs[0].ref, {
+            autoRenew: false,
+          });
+        }
+
+        // Calculate end date
+        const endDate = new Date(startDate);
+        if (billingPeriod === "monthly") {
+          endDate.setMonth(endDate.getMonth() + duration);
+        } else {
+          endDate.setFullYear(endDate.getFullYear() + duration);
+        }
+
+        // Create subscription record
+        const subscriptionRef = admin.firestore().collection("subscriptions").doc();
+        const subscriptionId = subscriptionRef.id;
+
+        transaction.set(subscriptionRef, {
+          subscriptionId,
+          userId,
+          planId,
+          billingPeriod,
+          duration,
+          tokenCost: totalTokenCost,
+          startDate: admin.firestore.Timestamp.fromDate(startDate),
+          endDate: admin.firestore.Timestamp.fromDate(endDate),
+          status: "active",
+          autoRenew: false,
+          createdAt: admin.firestore.FieldValue.serverTimestamp(),
+        });
+
+        // Deduct tokens
+        transaction.update(userRef, {
+          tokenBalance: admin.firestore.FieldValue.increment(-totalTokenCost),
+        });
+
+        // Log redemption
+        const redemptionRef = admin.firestore().collection("redemptions").doc();
+        transaction.set(redemptionRef, {
+          userId,
+          productType: "mediaSubscription",
+          productId: planId,
+          tokenCost: totalTokenCost,
+          subscriptionId,
+          createdAt: admin.firestore.FieldValue.serverTimestamp(),
+        });
+
+        // Update Emby permissions if user has linked account
+        const embyService = userData?.services?.emby;
+        if (embyService?.linked && embyService?.serviceUserId) {
+          // This will be done after the transaction completes
+          // to avoid blocking the transaction
+        }
+
+        return {
+          subscriptionId,
+          endDate: endDate.toISOString(),
+          embyUserId: embyService?.serviceUserId,
+        };
+      });
+
+      // Update Emby permissions outside of transaction
+      if (result.embyUserId) {
+        try {
+          await updateEmbySubscriptionPermissions(result.embyUserId, planId);
+        } catch (error) {
+          console.error("Failed to update Emby permissions:", error);
+          // Don't fail the whole operation if Emby update fails
+        }
+      }
+
+      return {
+        success: true,
+        subscriptionId: result.subscriptionId,
+        endDate: result.endDate,
+      };
+    } catch (error: unknown) {
+      console.error("Error in processSubscription:", error);
+      const errorMessage = error instanceof Error ? error.message : "Unknown error";
+      throw new HttpsError("internal", `Failed to process subscription: ${errorMessage}`);
+    }
+  }
+);
+
+exports.checkSubscriptionStatus = onCall<CheckSubscriptionStatusData, Promise<CheckSubscriptionStatusResponse>>(
+  async (request) => {
+    const { userId } = request.data;
+    const auth = request.auth;
+
+    if (!auth || auth.uid !== userId) {
+      throw new HttpsError("unauthenticated", "User must be authenticated.");
+    }
+
+    try {
+      // Check for active subscriptions
+      const activeSubQuery = admin
+        .firestore()
+        .collection("subscriptions")
+        .where("userId", "==", userId)
+        .where("status", "==", "active")
+        .orderBy("endDate", "desc")
+        .limit(1);
+
+      const activeSubSnapshot = await activeSubQuery.get();
+
+      if (activeSubSnapshot.empty) {
+        // Check if user has Emby account and disable it
+        const userDoc = await admin.firestore().doc(`users/${userId}`).get();
+        if (userDoc.exists) {
+          const userData = userDoc.data();
+          const embyService = userData?.services?.emby;
+          if (embyService?.linked && embyService?.serviceUserId) {
+            try {
+              await disableEmbyAccount(embyService.serviceUserId);
+            } catch (error) {
+              console.error("Failed to disable Emby account:", error);
+            }
+          }
+        }
+
+        return { hasActiveSubscription: false };
+      }
+
+      const subData = activeSubSnapshot.docs[0].data();
+      const endDate = subData.endDate.toDate();
+      const now = new Date();
+
+      if (endDate <= now) {
+        // Subscription has expired
+        await activeSubSnapshot.docs[0].ref.update({ status: "expired" });
+
+        // Disable Emby account
+        const userDoc = await admin.firestore().doc(`users/${userId}`).get();
+        if (userDoc.exists) {
+          const userData = userDoc.data();
+          const embyService = userData?.services?.emby;
+          if (embyService?.linked && embyService?.serviceUserId) {
+            try {
+              await disableEmbyAccount(embyService.serviceUserId);
+            } catch (error) {
+              console.error("Failed to disable Emby account:", error);
+            }
+          }
+        }
+
+        return { hasActiveSubscription: false };
+      }
+
+      const daysRemaining = Math.ceil((endDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+
+      return {
+        hasActiveSubscription: true,
+        subscription: {
+          subscriptionId: subData.subscriptionId,
+          planId: subData.planId,
+          billingPeriod: subData.billingPeriod,
+          startDate: subData.startDate.toDate().toISOString(),
+          endDate: endDate.toISOString(),
+          status: subData.status,
+          autoRenew: subData.autoRenew || false,
+          daysRemaining,
+        },
+      };
+    } catch (error: unknown) {
+      console.error("Error in checkSubscriptionStatus:", error);
+      const errorMessage = error instanceof Error ? error.message : "Unknown error";
+      throw new HttpsError("internal", `Failed to check subscription status: ${errorMessage}`);
+    }
+  }
+);
+
+exports.checkUsername = onCall<CheckUsernameData>(async (request) => {
+  const { username } = request.data;
+  if (!username || typeof username !== "string") {
+    throw new HttpsError("invalid-argument", "Username is required and must be a string.");
+  }
+
+  const trimmedUsername = username.trim();
+  if (trimmedUsername.length < 3) {
+    throw new HttpsError("invalid-argument", "Username must be at least 3 characters long.");
+  }
+
+  try {
+    const normalizedUsername = trimmedUsername.toLowerCase();
+    const usersSnapshot = await admin
+      .firestore()
+      .collection("users")
+      .where("normalizedUsername", "==", normalizedUsername)
+      .limit(1)
+      .get();
+
+    if (!usersSnapshot.empty) {
+      return { available: false };
+    }
+
+    const embyAvailable = await checkEmbyUsernameLocally(normalizedUsername);
+    return { available: embyAvailable };
+  } catch (error: unknown) {
+    console.error("Error checking username availability:", error);
+    const errorMessage = error instanceof Error ? error.message : "Unknown error";
+    throw new HttpsError("internal", `Failed to check username availability: ${errorMessage}`);
+  }
+});
+
+exports.setupUserAccount = onCall<SetupUserAccountData>(async (request) => {
+  const { email, username, password } = request.data;
+  const auth = request.auth;
+
+  if (!auth) {
+    throw new HttpsError("unauthenticated", "User must be authenticated.");
+  }
+
+  if (!email || !username || !password) {
+    throw new HttpsError("invalid-argument", "Email, username, and password are required.");
+  }
+
+  if (username.trim().length < 3) {
+    throw new HttpsError("invalid-argument", "Username must be at least 3 characters long.");
+  }
+
+  try {
+    await accountServiceManager.setupUserAccount(auth.uid, email, username, password);
+    console.log(`User setup completed for UID: ${auth.uid}, username: ${username}`);
+    return { success: true };
+  } catch (error: unknown) {
+    console.error("Error setting up user account:", error);
+    const errorMessage = error instanceof Error ? error.message : "Unknown error";
+    throw new HttpsError("internal", `Failed to setup user account: ${errorMessage}`);
+  }
+});
+
+exports.syncEmbyPassword = onCall(async (request) => {
+  const { username, newPassword } = request.data;
+  const auth = request.auth;
+
+  if (!auth) {
+    throw new HttpsError("unauthenticated", "User must be authenticated.");
+  }
+
+  if (!username || !newPassword) {
+    throw new HttpsError("invalid-argument", "Username and newPassword are required.");
+  }
+
+  try {
+    await accountServiceManager.syncPassword(username, newPassword);
+    console.log(`Password synced for username: ${username}`);
+    return { success: true };
+  } catch (error: unknown) {
+    console.error("Error syncing password:", error);
+    const errorMessage = error instanceof Error ? error.message : "Unknown error";
+    throw new HttpsError("internal", `Failed to sync password: ${errorMessage}`);
+  }
+});
+
+exports.activateEmbyAccount = onCall(async (request) => {
+  const auth = request.auth;
+  if (!auth) {
+    throw new HttpsError("unauthenticated", "User must be authenticated.");
+  }
+
+  const uid = auth.uid;
+
+  try {
+    const userRef = admin.firestore().doc(`users/${uid}`);
+    const userDoc = await userRef.get();
+
+    if (!userDoc.exists) {
+      throw new HttpsError("not-found", "User not found in Firestore.");
+    }
+
+    const userData = userDoc.data();
+    const embyService = userData?.services?.emby;
+
+    if (!embyService?.linked || !embyService?.serviceUserId) {
+      throw new HttpsError("failed-precondition", "Emby account is not linked.");
+    }
+
+    await accountServiceManager.enableUser("emby", embyService.serviceUserId);
+
+    await userRef.update({
+      "services.emby.subscriptionStatus": "active",
+    });
+
+    return { success: true, message: "Emby account activated successfully." };
+  } catch (error: unknown) {
+    console.error("Error activating Emby account:", error);
+    const errorMessage = error instanceof Error ? error.message : "Unknown error";
+    throw new HttpsError("internal", `Failed to activate Emby account: ${errorMessage}`);
+  }
+});
+
+exports.uploadProfileImage = onCall<UploadProfileImageData>(async (request) => {
+  const { fileName, contentType, file } = request.data;
+  const auth = request.auth;
+
+  if (!auth) {
+    throw new HttpsError("unauthenticated", "User must be authenticated to upload a profile image.");
+  }
+
+  if (!fileName || !contentType || !file) {
+    throw new HttpsError("invalid-argument", "Missing required fields: fileName, contentType, file.");
+  }
+
+  const supportedTypes = ["image/png", "image/jpeg", "image/jpg", "image/bmp"];
+  if (!supportedTypes.includes(contentType.toLowerCase())) {
+    throw new HttpsError("invalid-argument", "Unsupported file type. Use PNG, JPEG, JPG, or BMP.");
+  }
+
+  const MAX_FILE_SIZE = 5 * 1024 * 1024;
+  const buffer = Buffer.from(file, "base64");
+  if (buffer.length > MAX_FILE_SIZE) {
+    throw new HttpsError("invalid-argument", "File size exceeds 5MB limit.");
+  }
+
+  if (!isValidMagicBytes(buffer, contentType.toLowerCase())) {
+    throw new HttpsError("invalid-argument", "File content does not match the declared MIME type.");
+  }
+
+  const uid = auth.uid;
+  const fileExtension = path.extname(fileName).toLowerCase() || ".jpg";
+  const storagePath = `users/${uid}/profile${fileExtension}`;
+
+  const tempFilePath = path.join(os.tmpdir(), `${uid}_${Date.now()}${fileExtension}`);
+  let tempFileDeleted = false;
+
+  try {
+    await fs.promises.writeFile(tempFilePath, buffer);
+    console.log(`Temp file written to: ${tempFilePath}, size: ${buffer.length} bytes`);
+
+    const uploadToken = `${uid}_${Date.now()}`;
+    const [uploadedFile] = await BUCKET.upload(tempFilePath, {
+      destination: storagePath,
+      metadata: {
+        contentType: contentType.toLowerCase(),
+        metadata: { firebaseStorageDownloadTokens: uploadToken },
+      },
+    });
+
+    const publicUrl = `https://firebasestorage.googleapis.com/v0/b/${BUCKET.name}/o/${encodeURIComponent(
+      uploadedFile.name
+    )}?alt=media&token=${uploadToken}`;
+    console.log(`Profile image uploaded successfully, URL: ${publicUrl}`);
+
+    const userRef = admin.firestore().doc(`users/${uid}`);
+    const userDoc = await userRef.get();
+    if (!userDoc.exists) {
+      throw new HttpsError("not-found", "User not found in Firestore.");
+    }
+
+    const userData = userDoc.data();
+    const normalizedUsername = userData?.normalizedUsername;
+    if (!normalizedUsername) {
+      throw new HttpsError("not-found", "Normalized username not found for user.");
+    }
+
+    await userRef.update({ profileImage: publicUrl });
+    console.log(`Firestore updated with profile image URL for user ${uid}`);
+
+    try {
+      await accountServiceManager.syncProfileImage(normalizedUsername, publicUrl, contentType.toLowerCase());
+      console.log(`Profile image synced to Emby for user ${uid}`);
+    } catch (syncError: unknown) {
+      console.error("Failed to sync profile image to Emby (non-critical):", syncError);
+    }
+
+    try {
+      await fs.promises.unlink(tempFilePath);
+      tempFileDeleted = true;
+      console.log(`Temp file deleted: ${tempFilePath}`);
+    } catch (cleanupError) {
+      console.error("Failed to delete temp file (non-critical):", cleanupError);
+    }
+
+    return {
+      success: true,
+      message: "Profile image uploaded successfully",
+      url: publicUrl,
+      storagePath,
+    };
+  } catch (error: unknown) {
+    if (!tempFileDeleted && tempFilePath) {
+      try {
+        await fs.promises.unlink(tempFilePath);
+        console.log(`Temp file deleted after error: ${tempFilePath}`);
+      } catch (cleanupError) {
+        console.error("Failed to delete temp file after error (non-critical):", cleanupError);
+      }
+    }
+
+    console.error("Error uploading profile image:", error);
+    const errorMessage = error instanceof Error ? error.message : "Unknown error";
+    throw new HttpsError("internal", `Failed to upload profile image: ${errorMessage}`);
+  }
+});

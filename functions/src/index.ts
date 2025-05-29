@@ -628,9 +628,6 @@ async function updateEmbySubscriptionPermissions(embyUserId: string, planId: str
 
 const accountServiceManager = new AccountServiceManager();
 
-
-// ... previous code up to line 629 ...
-
 exports.createPaypalOrder = onCall<CreatePaypalOrderData, Promise<CreatePaypalOrderResponse>>(
   async (request) => {
     const { userId, sessionId, tokens, amount, currency } = request.data;

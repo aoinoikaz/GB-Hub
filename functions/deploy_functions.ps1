@@ -46,7 +46,8 @@ $commonParams = @(
     "--service-account=$SERVICE_ACCOUNT",
     "--build-service-account=$BUILD_SERVICE_ACCOUNT",
     "--project=$PROJECT_ID",
-    "--allow-unauthenticated"
+    "--allow-unauthenticated",
+    "--set-env-vars=GCLOUD_PROJECT=$PROJECT_ID"
 )
 
 # Optional: Set PayPal sandbox mode (uncomment if needed)

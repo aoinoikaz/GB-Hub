@@ -8,6 +8,3 @@ typings/
 # Node.js dependency directory
 node_modules/
 *.local
-
-# Misc
-/deploy_all_functions_gcloud.bat

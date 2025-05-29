@@ -9,6 +9,7 @@ import { Spinner, Coin, CurrencyDollar, Handshake, Gift, Trophy, ArrowRight } fr
 import { debounce } from "lodash";
 import { v4 as uuidv4 } from "uuid";
 import { useNavigate } from "react-router-dom";
+import Pagination from "./Pagination";
 
 // Define the return type of the processTokenPurchase Cloud Function
 interface ProcessTokenPurchaseResponse {
@@ -89,25 +90,12 @@ const Store = () => {
   const [error, setError] = useState<string | null>(null);
   const [transactionHistory, setTransactionHistory] = useState<Transaction[]>([]);
   const [isLoadingHistory, setIsLoadingHistory] = useState<boolean>(true);
-  const [isMobile, setIsMobile] = useState<boolean>(false);
 
   // Pagination state
   const [currentPage, setCurrentPage] = useState<number>(1);
   const [transactionsPerPage, setTransactionsPerPage] = useState<number>(5);
   const [totalTransactions, setTotalTransactions] = useState<number>(0);
   const [allTransactions, setAllTransactions] = useState<Transaction[]>([]);
-
-  // Detect mobile screen size
-  useEffect(() => {
-    const checkMobile = () => {
-      const mobile = window.matchMedia("(max-width: 640px)").matches;
-      setIsMobile(mobile);
-    };
-
-    checkMobile();
-    window.addEventListener("resize", checkMobile);
-    return () => window.removeEventListener("resize", checkMobile);
-  }, []);
 
   // Fetch the user's token balance from Firestore
   const fetchTokenBalance = async () => {
@@ -398,67 +386,6 @@ const Store = () => {
 
   const totalPages = Math.ceil(totalTransactions / transactionsPerPage);
 
-  const getPageNumbers = () => {
-    const pages: (number | string)[] = [];
-    const maxButtonsToShow = 5;
-
-    if (isMobile) {
-      return [];
-    } else {
-      if (totalPages <= maxButtonsToShow) {
-        for (let i = 1; i <= totalPages; i++) pages.push(i);
-      } else {
-        const maxMainRange = maxButtonsToShow - 2;
-        const half = Math.floor(maxMainRange / 2);
-        let leftBound = Math.max(2, currentPage - half);
-        let rightBound = Math.min(totalPages - 1, currentPage + half);
-
-        const currentRangeSize = rightBound - leftBound + 1;
-        if (currentRangeSize > maxMainRange) {
-          if (currentPage <= half + 1) {
-            rightBound = leftBound + maxMainRange - 1;
-          } else if (currentPage >= totalPages - half) {
-            leftBound = rightBound - maxMainRange + 1;
-          } else {
-            leftBound = currentPage - Math.floor(maxMainRange / 2);
-            rightBound = leftBound + maxMainRange - 1;
-          }
-        } else if (currentRangeSize < maxMainRange) {
-          if (currentPage <= half + 1) {
-            rightBound = leftBound + maxMainRange - 1;
-          } else if (currentPage >= totalPages - half) {
-            leftBound = rightBound - maxMainRange + 1;
-          }
-        }
-
-        pages.push(1);
-        if (leftBound > 2) {
-          pages.push("...");
-        } else if (leftBound === 2) {
-          pages.push(2);
-          leftBound = 3;
-        }
-
-        for (let i = leftBound; i <= rightBound; i++) {
-          pages.push(i);
-        }
-
-        if (rightBound < totalPages - 1) {
-          pages.push("...");
-          pages.push(totalPages);
-        } else if (rightBound === totalPages - 1) {
-          pages.push(totalPages);
-        }
-      }
-    }
-
-    return pages;
-  };
-
-  const handlePageChange = (page: number) => {
-    setCurrentPage(page);
-  };
-
   const referralCode = authUser?.uid?.slice(0, 8).toUpperCase() || "N/A";
 
   return (
@@ -729,54 +656,13 @@ const Store = () => {
           </div>
           
           {totalTransactions > 0 && (
-            <div className="flex justify-center items-center mt-6 space-x-2">
-              <button
-                onClick={() => setCurrentPage(Math.max(currentPage - 1, 1))}
-                disabled={currentPage === 1 || isLoadingHistory}
-                className={`py-2 px-4 rounded-md text-white ${
-                  currentPage === 1 || isLoadingHistory 
-                    ? "bg-gray-600 cursor-not-allowed" 
-                    : "bg-purple-600 hover:bg-purple-700"
-                }`}
-              >
-                Back
-              </button>
-              
-              {isMobile ? (
-                <span className="text-gray-200 text-sm py-1">
-                  Page {currentPage} of {totalPages}
-                </span>
-              ) : (
-                <div className="flex space-x-1">
-                  {getPageNumbers().map((page, index) => (
-                    <button
-                      key={index}
-                      onClick={() => typeof page === "number" && handlePageChange(page)}
-                      className={`py-1 px-3 rounded-md ${
-                        typeof page === "number" && page === currentPage 
-                          ? "bg-purple-600 text-white" 
-                          : "bg-gray-700 text-gray-200 hover:bg-gray-600"
-                      } ${typeof page === "string" ? "cursor-default" : ""}`}
-                      disabled={typeof page === "string" || isLoadingHistory}
-                    >
-                      {page}
-                    </button>
-                  ))}
-                </div>
-              )}
-              
-              <button
-                onClick={() => setCurrentPage(Math.min(currentPage + 1, totalPages))}
-                disabled={currentPage === totalPages || isLoadingHistory}
-                className={`py-2 px-4 rounded-md text-white ${
-                  currentPage === totalPages || isLoadingHistory 
-                    ? "bg-gray-600 cursor-not-allowed" 
-                    : "bg-purple-600 hover:bg-purple-700"
-                }`}
-              >
-                Next
-              </button>
-            </div>
+            <Pagination
+              currentPage={currentPage}
+              totalPages={totalPages}
+              onPageChange={setCurrentPage}
+              isLoading={isLoadingHistory}
+              className="mt-6"
+            />
           )}
         </div>
 

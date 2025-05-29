@@ -1073,10 +1073,6 @@ exports.processTip = onCall<ProcessTipData, Promise<ProcessTipResponse>>(async (
   }
 });
 
-// processSubscription and checkSubscriptionStatus remain unchanged as they don't use external secrets
-
-// ... previous code up to line 932 (processTip function) ...
-
 exports.processTokenTrade = onCall<ProcessTokenTradeData, Promise<ProcessTokenTradeResponse>>(
   async (request) => {
     const { senderId, receiverUsername, tokens } = request.data;

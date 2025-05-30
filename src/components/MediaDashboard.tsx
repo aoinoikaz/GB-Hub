@@ -117,7 +117,7 @@ const subscriptionPlans: SubscriptionPlan[] = [
     monthlyTokens: 250,  // Adjusted from 300
     yearlyTokens: 2500,  // Adjusted from 3000
     features: {
-      streams: "unlimited",
+      streams: 10,  // Changed from "unlimited" to 10
       downloads: true,
       movieRequests: 10,
       tvRequests: 4,
@@ -626,7 +626,7 @@ const MediaDashboard = () => {
                     </li>
                     <li className="flex items-center">
                       <Check size={16} className="text-green-400 mr-2" />
-                      {plan.features.streams === "unlimited" ? "Unlimited" : plan.features.streams} stream{plan.features.streams !== 1 ? "s" : ""}
+                      {plan.features.streams} stream{plan.features.streams !== 1 ? "s" : ""}
                     </li>
                     <li className="flex items-center">
                       {plan.features.downloads ? (
@@ -640,16 +640,12 @@ const MediaDashboard = () => {
                       <FilmSlate size={16} className="mr-2 text-gray-400" />
                       {plan.features.movieRequests === 0
                         ? "No movie requests"
-                        : plan.features.movieRequests === "unlimited"
-                        ? "Unlimited movie requests"
                         : `${plan.features.movieRequests} movie request${plan.features.movieRequests > 1 ? "s" : ""}/month`}
                     </li>
                     <li className="flex items-center">
                       <Television size={16} className="mr-2 text-gray-400" />
                       {plan.features.tvRequests === 0
                         ? "No TV requests"
-                        : plan.features.tvRequests === "unlimited"
-                        ? "Unlimited TV requests"
                         : `${plan.features.tvRequests} TV show${plan.features.tvRequests > 1 ? "s" : ""}/month`}
                     </li>
                     <li className="flex items-center">

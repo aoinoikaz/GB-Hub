@@ -73,7 +73,7 @@ const subscriptionPlans: SubscriptionPlan[] = [
       streams: 1,
       downloads: true,
       movieRequests: 1,
-      tvRequests: 0, // No TV requests
+      tvRequests: 0,
       support: "standard",
     },
     icon: <Download size={24} />,
@@ -88,7 +88,7 @@ const subscriptionPlans: SubscriptionPlan[] = [
       streams: 2,
       downloads: true,
       movieRequests: 2,
-      tvRequests: 1, // First TV tier!
+      tvRequests: 1,
       support: "standard",
     },
     icon: <Users size={24} />,
@@ -111,34 +111,19 @@ const subscriptionPlans: SubscriptionPlan[] = [
     color: "pink",
   },
   {
-    id: "vip",
-    name: "VIP",
-    monthlyTokens: 180,
-    yearlyTokens: 1800,
+    id: "ultimate",
+    name: "Ultimate",
+    monthlyTokens: 250,  // Adjusted from 300
+    yearlyTokens: 2500,  // Adjusted from 3000
     features: {
-      streams: 5,
+      streams: "unlimited",
       downloads: true,
-      movieRequests: 10,
-      tvRequests: 5,
+      movieRequests: "10",
+      tvRequests: "4",
       support: "priority",
     },
     icon: <Crown size={24} />,
     color: "yellow",
-  },
-  {
-    id: "ultimate",
-    name: "Ultimate",
-    monthlyTokens: 300,
-    yearlyTokens: 3000,
-    features: {
-      streams: "unlimited",
-      downloads: true,
-      movieRequests: "unlimited",
-      tvRequests: "unlimited",
-      support: "priority",
-    },
-    icon: <Star size={24} />,
-    color: "red",
   },
 ];
 

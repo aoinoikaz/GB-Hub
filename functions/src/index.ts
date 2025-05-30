@@ -45,8 +45,7 @@ const SUBSCRIPTION_PLANS: { [key: string]: SubscriptionPlan } = {
   standard: { monthly: 60, yearly: 600 },
   duo: { monthly: 80, yearly: 800 },
   family: { monthly: 120, yearly: 1200 },
-  vip: { monthly: 180, yearly: 1800 },
-  ultimate: { monthly: 300, yearly: 3000 },
+  ultimate: { monthly: 250, yearly: 2500 },
 };
 
 const VALID_MAGIC_BYTES: { [key: string]: number[] } = {
@@ -598,8 +597,7 @@ async function updateEmbySubscriptionPermissions(embyUserId: string, planId: str
     standard: { SimultaneousStreamLimit: 1, EnableContentDownloading: true },
     duo: { SimultaneousStreamLimit: 2, EnableContentDownloading: true },
     family: { SimultaneousStreamLimit: 4, EnableContentDownloading: true },
-    vip: { SimultaneousStreamLimit: 5, EnableContentDownloading: true },
-    ultimate: { SimultaneousStreamLimit: 0, EnableContentDownloading: true }, // 0 = unlimited
+    ultimate: { SimultaneousStreamLimit: 0, EnableContentDownloading: true }, // 0 = unlimited streams
   };
 
   const permissions = planPermissions[planId];
@@ -676,13 +674,12 @@ const secrets = await getSecretsConfig();
   
   // Map subscription plans to Jellyseerr request limits
   const planLimits: { [key: string]: { movieLimit: number | null; tvLimit: number | null } } = {
-    basic: { movieLimit: 0, tvLimit: 0 },
-    standard: { movieLimit: 1, tvLimit: 0 },
-    duo: { movieLimit: 2, tvLimit: 1 },
-    family: { movieLimit: 4, tvLimit: 2 },
-    vip: { movieLimit: 10, tvLimit: 5 },
-    ultimate: { movieLimit: null, tvLimit: null }, // null = unlimited in Jellyseerr
-  };
+  basic: { movieLimit: 0, tvLimit: 0 },
+  standard: { movieLimit: 1, tvLimit: 0 },
+  duo: { movieLimit: 2, tvLimit: 1 },
+  family: { movieLimit: 4, tvLimit: 2 },
+  ultimate: { movieLimit: 10, tvLimit: 4 },
+};
 
   const limits = planLimits[planId];
   if (!limits) {
@@ -769,7 +766,7 @@ exports.createPaypalOrder = onCall<CreatePaypalOrderData, Promise<CreatePaypalOr
       throw new HttpsError("invalid-argument", "Currency must be 'USD'.");
     }
 
-    const validTokenPackages = [60, 120, 600, 1200];
+    const validTokenPackages = [50, 100, 300, 600, 1200, 2500];
     if (!validTokenPackages.includes(tokens)) {
       throw new HttpsError("invalid-argument", "Invalid token package.");
     }
@@ -873,7 +870,7 @@ exports.processTokenPurchase = onCall<ProcessTokenPurchaseData, Promise<ProcessT
       throw new HttpsError("invalid-argument", "Currency must be 'USD'.");
     }
 
-    const validTokenPackages = [60, 120, 600, 1200];
+    const validTokenPackages = [50, 100, 300, 600, 1200, 2500];
     if (!validTokenPackages.includes(tokens)) {
       throw new HttpsError("invalid-argument", "Invalid token package.");
     }

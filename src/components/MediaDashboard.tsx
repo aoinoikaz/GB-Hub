@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { doc, getDoc } from "firebase/firestore";
 import { db } from "../config/firebase";
 import { useAuth } from "../context/auth-context";
-import { Info, Spinner, Monitor, Download, FilmSlate, Television, Users, Crown, Star, Check, X, Rocket, Lightning, Zap } from "phosphor-react";
+import { Info, Spinner, Monitor, Download, FilmSlate, Television, Users, Crown, Star, Check, X, Rocket, Lightning } from "phosphor-react";
 import { getFunctions, httpsCallable } from "firebase/functions";
 import { useNavigate } from "react-router-dom";
 
@@ -197,7 +197,6 @@ const MediaDashboard = () => {
   const [tokenBalance, setTokenBalance] = useState<number>(0);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
-  const [activating, setActivating] = useState(false);
   const [selectedPlan, setSelectedPlan] = useState<string | null>(null);
   const [billingPeriod, setBillingPeriod] = useState<"monthly" | "yearly">("monthly");
   const [duration, setDuration] = useState<number>(1);
@@ -268,28 +267,7 @@ const MediaDashboard = () => {
 
     fetchUserData();
   }, [user, authLoading]);
-
-  const handleActivate = async () => {
-    if (!user) return;
-    setActivating(true);
-    setError(null);
-
-    try {
-      const activateEmbyAccount = httpsCallable(functions, "activateEmbyAccount");
-      const result = await activateEmbyAccount();
-      const data = result.data as { success: boolean; message: string };
-      if (data.success) {
-        setSubscriptionStatus("active");
-        console.log(data.message);
-      }
-    } catch (err: any) {
-      setError("Failed to activate account: " + (err.message || "Unknown error"));
-      console.error("Activation error:", err);
-    } finally {
-      setActivating(false);
-    }
-  };
-
+  
   const calculateTokenCost = () => {
     if (!selectedPlan) return 0;
     const plan = subscriptionPlans.find((p) => p.id === selectedPlan);
@@ -374,10 +352,6 @@ const MediaDashboard = () => {
         
         setSelectedPlan(null);
         setDuration(1);
-        
-        if (subscriptionStatus !== "active") {
-          await handleActivate();
-        }
       }
       
     } catch (err: any) {
@@ -502,7 +476,7 @@ const MediaDashboard = () => {
                     onClick={() => setShowBoosterPacks(!showBoosterPacks)}
                     className="mt-3 text-sm bg-gradient-to-r from-orange-500 to-red-500 px-3 py-1 rounded-md hover:opacity-90 transition flex items-center gap-2"
                   >
-                    <Zap size={16} />
+                    <Lightning size={16} />
                     {showBoosterPacks ? "Hide" : "Show"} Booster Packs
                   </button>
                 )}
@@ -541,7 +515,7 @@ const MediaDashboard = () => {
           {showBoosterPacks && activeSubscription && (
             <div className="mb-6 p-4 bg-gray-800 rounded-lg">
               <h3 className="text-xl font-semibold mb-4 flex items-center">
-                <Zap size={24} className="mr-2 text-yellow-400" />
+                <Lightning size={24} className="mr-2 text-yellow-400" />
                 Power-Up Booster Packs
               </h3>
               <p className="text-sm text-gray-400 mb-4">

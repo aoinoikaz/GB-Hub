@@ -31,13 +31,14 @@ interface CheckSubscriptionStatusResponse {
   };
 }
 
+
 interface SubscriptionPlan {
   id: string;
   name: string;
   monthlyTokens: number;
   yearlyTokens: number;
   features: {
-    streams: number | "unlimited";
+    streams: number;
     downloads: boolean;
     movieRequests: number;
     tvRequests: number;

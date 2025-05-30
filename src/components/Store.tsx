@@ -455,7 +455,7 @@ const [selectedTokenPackage, setSelectedTokenPackage] = useState<"50" | "100" | 
             {Object.entries(tokenPackages).map(([tokens, pkg]) => (
               <div
                 key={tokens}
-                onClick={() => setSelectedTokenPackage(tokens as "60" | "120" | "600" | "1200")}
+                onClick={() => setSelectedTokenPackage(tokens as "50" | "100" | "300" | "600" | "1200" | "2500")}
                 className={`p-4 border-2 rounded-lg cursor-pointer transition ${
                   selectedTokenPackage === tokens
                     ? "border-purple-500 bg-purple-500/10"

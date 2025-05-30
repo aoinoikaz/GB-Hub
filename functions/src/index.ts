@@ -573,7 +573,8 @@ async function disableEmbyAccount(embyUserId: string): Promise<void> {
   }
 }
 
-// Helper function to update Emby permissions based on subscription plan
+// In functions/src/index.ts - Just replace the updateEmbySubscriptionPermissions function
+
 async function updateEmbySubscriptionPermissions(embyUserId: string, planId: string): Promise<void> {
   const secrets = await getSecretsConfig();
   
@@ -604,11 +605,36 @@ async function updateEmbySubscriptionPermissions(embyUserId: string, planId: str
   const userData = await userResponse.json();
   const currentPolicy = userData.Policy || {};
 
-  // Merge with new permissions
+  // CRITICAL FIX: If user is disabled, enable them first
+  if (currentPolicy.IsDisabled) {
+    console.log(`User ${embyUserId} is disabled. Enabling first...`);
+    
+    // First, just enable the user
+    const enableResponse = await fetch(`${EMBY_BASE_URL}/Users/${embyUserId}/Policy`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Emby-Token": secrets.EMBY_API_KEY,
+      },
+      body: JSON.stringify({ 
+        ...currentPolicy,
+        IsDisabled: false 
+      }),
+    });
+
+    if (!enableResponse.ok) {
+      throw new Error(`Failed to enable Emby user: ${enableResponse.status}`);
+    }
+    
+    // Small delay to ensure the enable takes effect
+    await new Promise(resolve => setTimeout(resolve, 500));
+  }
+
+  // Now merge with new permissions while keeping your existing policy structure
   const updatedPolicy = {
     ...currentPolicy,
     ...permissions,
-    IsDisabled: false, // Ensure account is active
+    IsDisabled: false, // Ensure account stays active
   };
 
   // Update user policy
@@ -624,6 +650,8 @@ async function updateEmbySubscriptionPermissions(embyUserId: string, planId: str
   if (!updateResponse.ok) {
     throw new Error(`Failed to update Emby user policy: ${updateResponse.status}`);
   }
+  
+  console.log(`Successfully updated Emby permissions for user ${embyUserId} with plan ${planId}`);
 }
 
 const accountServiceManager = new AccountServiceManager();

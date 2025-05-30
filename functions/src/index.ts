@@ -725,7 +725,6 @@ async function updateJellyseerrRequestLimits(email: string, planId: string, emby
     // Update the user's request limits
     // Set quotaDays to null to disable Jellyseerr's auto-reset since we manage it
     const updatePayload = {
-      id: jellyseerrUser.id,
       permissions: jellyseerrUser.permissions || 2, // Preserve existing permissions
       movieQuotaLimit: limits.movieLimit,
       movieQuotaDays: null, // Disable auto-reset
@@ -1294,6 +1293,7 @@ exports.processTokenTrade = onCall<ProcessTokenTradeData, Promise<ProcessTokenTr
     }
   }
 );
+
 
 // Update the processSubscription function to pass embyUserId instead of username
 exports.processSubscription = onCall<ProcessSubscriptionData, Promise<ProcessSubscriptionResponse>>(

@@ -30,10 +30,13 @@ async function getSecretsConfig() {
   return secretsConfig;
 }
 
+
+
 // Determine if we're in sandbox mode (you can set this via environment variable)
 const IS_PAYPAL_SANDBOX = process.env.PAYPAL_SANDBOX === 'true';
 
 const EMBY_BASE_URL: string = "https://media.gondolabros.com";
+const JELLYSEERR_URL = "https://request-media.gondolabros.com"
 const BUCKET = admin.storage().bucket();
 
 const SUBSCRIPTION_PLANS: { [key: string]: SubscriptionPlan } = {
@@ -51,6 +54,7 @@ const VALID_MAGIC_BYTES: { [key: string]: number[] } = {
   "image/jpg": [0xff, 0xd8, 0xff],
   "image/bmp": [0x42, 0x4d],
 };
+
 
 // Interface definitions
 interface UploadProfileImageData {
@@ -170,6 +174,16 @@ interface CheckSubscriptionStatusResponse {
     autoRenew: boolean;
     daysRemaining: number;
   };
+}
+
+interface JellyseerrUser {
+  id: number;
+  email: string;
+  username: string;
+  movieQuotaLimit: number | null;
+  movieQuotaDays: number | null;
+  tvQuotaLimit: number | null;
+  tvQuotaDays: number | null;
 }
 
 // Service Handler Interface
@@ -573,7 +587,6 @@ async function disableEmbyAccount(embyUserId: string): Promise<void> {
   }
 }
 
-// In functions/src/index.ts - Just replace the updateEmbySubscriptionPermissions function
 
 async function updateEmbySubscriptionPermissions(embyUserId: string, planId: string): Promise<void> {
   const secrets = await getSecretsConfig();
@@ -653,6 +666,75 @@ async function updateEmbySubscriptionPermissions(embyUserId: string, planId: str
   
   console.log(`Successfully updated Emby permissions for user ${embyUserId} with plan ${planId}`);
 }
+
+
+// Add this function to update Jellyseerr request limits
+async function updateJellyseerrRequestLimits(email: string, planId: string): Promise<void> {
+  const secrets = await getSecretsConfig();
+  const JELLYSEERR_API_KEY = await getSecret('JELLYSEERR_API_KEY'); // Add this to your secrets
+  
+  // Map subscription plans to Jellyseerr request limits
+  const planLimits: { [key: string]: { movieLimit: number | null; tvLimit: number | null } } = {
+    basic: { movieLimit: 0, tvLimit: 0 },
+    standard: { movieLimit: 1, tvLimit: 0 },
+    duo: { movieLimit: 2, tvLimit: 1 },
+    family: { movieLimit: 4, tvLimit: 2 },
+    vip: { movieLimit: 10, tvLimit: 5 },
+    ultimate: { movieLimit: null, tvLimit: null }, // null = unlimited in Jellyseerr
+  };
+
+  const limits = planLimits[planId];
+  if (!limits) {
+    throw new Error(`Unknown plan ID for Jellyseerr: ${planId}`);
+  }
+
+  try {
+    // First, find the user in Jellyseerr by email
+    const usersResponse = await fetch(`${JELLYSEERR_URL}/api/v1/user`, {
+      headers: {
+        "X-Api-Key": JELLYSEERR_API_KEY,
+        "Content-Type": "application/json",
+      },
+    });
+
+    if (!usersResponse.ok) {
+      throw new Error(`Failed to fetch Jellyseerr users: ${usersResponse.status}`);
+    }
+
+    const users = await usersResponse.json();
+    const jellyseerrUser = users.find((user: JellyseerrUser) => user.email === email);
+
+    if (!jellyseerrUser) {
+      console.log(`User ${email} not found in Jellyseerr, skipping update`);
+      return;
+    }
+
+    // Update the user's request limits
+    const updateResponse = await fetch(`${JELLYSEERR_URL}/api/v1/user/${jellyseerrUser.id}`, {
+      method: "PUT",
+      headers: {
+        "X-Api-Key": JELLYSEERR_API_KEY,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        movieQuotaLimit: limits.movieLimit,
+        movieQuotaDays: limits.movieLimit === null ? null : 30, // Monthly reset
+        tvQuotaLimit: limits.tvLimit,
+        tvQuotaDays: limits.tvLimit === null ? null : 30, // Monthly reset
+      }),
+    });
+
+    if (!updateResponse.ok) {
+      throw new Error(`Failed to update Jellyseerr user limits: ${updateResponse.status}`);
+    }
+
+    console.log(`Successfully updated Jellyseerr request limits for user ${email} with plan ${planId}`);
+  } catch (error) {
+    console.error("Error updating Jellyseerr limits:", error);
+    // Don't throw - Jellyseerr update failures shouldn't block subscription
+  }
+}
+
 
 const accountServiceManager = new AccountServiceManager();
 
@@ -1188,6 +1270,8 @@ exports.processTokenTrade = onCall<ProcessTokenTradeData, Promise<ProcessTokenTr
   }
 );
 
+
+// Update the processSubscription function to include Jellyseerr updates
 exports.processSubscription = onCall<ProcessSubscriptionData, Promise<ProcessSubscriptionResponse>>(
   async (request) => {
     const { userId, planId, billingPeriod, duration } = request.data;
@@ -1298,17 +1382,11 @@ exports.processSubscription = onCall<ProcessSubscriptionData, Promise<ProcessSub
           createdAt: admin.firestore.FieldValue.serverTimestamp(),
         });
 
-        // Update Emby permissions if user has linked account
-        const embyService = userData?.services?.emby;
-        if (embyService?.linked && embyService?.serviceUserId) {
-          // This will be done after the transaction completes
-          // to avoid blocking the transaction
-        }
-
         return {
           subscriptionId,
           endDate: endDate.toISOString(),
-          embyUserId: embyService?.serviceUserId,
+          embyUserId: userData?.services?.emby?.serviceUserId,
+          email: userData?.email,
         };
       });
 
@@ -1319,6 +1397,16 @@ exports.processSubscription = onCall<ProcessSubscriptionData, Promise<ProcessSub
         } catch (error) {
           console.error("Failed to update Emby permissions:", error);
           // Don't fail the whole operation if Emby update fails
+        }
+      }
+
+      // Update Jellyseerr request limits
+      if (result.email) {
+        try {
+          await updateJellyseerrRequestLimits(result.email, planId);
+        } catch (error) {
+          console.error("Failed to update Jellyseerr limits:", error);
+          // Don't fail the whole operation if Jellyseerr update fails
         }
       }
 
@@ -1335,6 +1423,7 @@ exports.processSubscription = onCall<ProcessSubscriptionData, Promise<ProcessSub
   }
 );
 
+// Also update checkSubscriptionStatus to disable in Jellyseerr when expired
 exports.checkSubscriptionStatus = onCall<CheckSubscriptionStatusData, Promise<CheckSubscriptionStatusResponse>>(
   async (request) => {
     const { userId } = request.data;
@@ -1369,6 +1458,15 @@ exports.checkSubscriptionStatus = onCall<CheckSubscriptionStatusData, Promise<Ch
               console.error("Failed to disable Emby account:", error);
             }
           }
+          
+          // Also disable Jellyseerr requests
+          if (userData?.email) {
+            try {
+              await updateJellyseerrRequestLimits(userData.email, "basic"); // basic = no requests
+            } catch (error) {
+              console.error("Failed to disable Jellyseerr requests:", error);
+            }
+          }
         }
 
         return { hasActiveSubscription: false };
@@ -1382,7 +1480,7 @@ exports.checkSubscriptionStatus = onCall<CheckSubscriptionStatusData, Promise<Ch
         // Subscription has expired
         await activeSubSnapshot.docs[0].ref.update({ status: "expired" });
 
-        // Disable Emby account
+        // Disable Emby account and Jellyseerr
         const userDoc = await admin.firestore().doc(`users/${userId}`).get();
         if (userDoc.exists) {
           const userData = userDoc.data();
@@ -1392,6 +1490,15 @@ exports.checkSubscriptionStatus = onCall<CheckSubscriptionStatusData, Promise<Ch
               await disableEmbyAccount(embyService.serviceUserId);
             } catch (error) {
               console.error("Failed to disable Emby account:", error);
+            }
+          }
+          
+          // Also disable Jellyseerr requests
+          if (userData?.email) {
+            try {
+              await updateJellyseerrRequestLimits(userData.email, "basic");
+            } catch (error) {
+              console.error("Failed to disable Jellyseerr requests:", error);
             }
           }
         }
@@ -1645,4 +1752,3 @@ exports.uploadProfileImage = onCall<UploadProfileImageData>(async (request) => {
     throw new HttpsError("internal", `Failed to upload profile image: ${errorMessage}`);
   }
 });
-

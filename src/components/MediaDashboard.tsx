@@ -39,8 +39,8 @@ interface SubscriptionPlan {
   features: {
     streams: number | "unlimited";
     downloads: boolean;
-    movieRequests: number | "unlimited";
-    tvRequests: number | "unlimited";
+    movieRequests: number;
+    tvRequests: number;
     support: "standard" | "priority";
   };
   popular?: boolean;

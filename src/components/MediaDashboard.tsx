@@ -118,8 +118,8 @@ const subscriptionPlans: SubscriptionPlan[] = [
     features: {
       streams: "unlimited",
       downloads: true,
-      movieRequests: "10",
-      tvRequests: "4",
+      movieRequests: 10,
+      tvRequests: 4,
       support: "priority",
     },
     icon: <Crown size={24} />,
@@ -445,7 +445,7 @@ const MediaDashboard = () => {
                         Movies: {activeSubscription.movieRequestsUsed || 0}/{subscriptionPlans.find(p => p.id === currentPlan)?.features.movieRequests || 0}
                       </span>
                     </div>
-                    {subscriptionPlans.find(p => p.id === currentPlan)?.features.tvRequests !== 0 && (
+                    {(subscriptionPlans.find(p => p.id === currentPlan)?.features.tvRequests || 0) > 0 && (
                       <div className="flex items-center gap-2">
                         <Television size={16} className="text-teal-400" />
                         <span className="text-sm">

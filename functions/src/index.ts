@@ -176,16 +176,6 @@ interface CheckSubscriptionStatusResponse {
   };
 }
 
-interface JellyseerrUser {
-  id: number;
-  email: string;
-  username: string;
-  movieQuotaLimit: number | null;
-  movieQuotaDays: number | null;
-  tvQuotaLimit: number | null;
-  tvQuotaDays: number | null;
-}
-
 // Service Handler Interface
 interface ServiceHandler {
   createUser(email: string, username: string, normalizedUsername: string, password: string): Promise<string>;
@@ -673,72 +663,99 @@ async function updateEmbySubscriptionPermissions(embyUserId: string, planId: str
   console.log(`Successfully updated Emby permissions for user ${embyUserId} with plan ${planId}`);
 }
 
-// Add this function to update Jellyseerr request limits
-async function updateJellyseerrRequestLimits(email: string, planId: string): Promise<void> {
-const secrets = await getSecretsConfig();
+async function updateJellyseerrRequestLimits(email: string, planId: string, embyUsername?: string): Promise<void> {
+  const secrets = await getSecretsConfig();
   const JELLYSEERR_API_KEY = secrets.JELLYSEERR_API_KEY;
   
   // Map subscription plans to Jellyseerr request limits
-  const planLimits: { [key: string]: { movieLimit: number | null; tvLimit: number | null } } = {
-  basic: { movieLimit: 0, tvLimit: 0 },
-  standard: { movieLimit: 1, tvLimit: 0 },
-  duo: { movieLimit: 2, tvLimit: 1 },
-  family: { movieLimit: 4, tvLimit: 2 },
-  ultimate: { movieLimit: 10, tvLimit: 4 },
-};
+  const planLimits: { [key: string]: { movieLimit: number; tvLimit: number } } = {
+    basic: { movieLimit: 0, tvLimit: 0 },
+    standard: { movieLimit: 1, tvLimit: 0 },
+    duo: { movieLimit: 2, tvLimit: 1 },
+    family: { movieLimit: 4, tvLimit: 2 },
+    ultimate: { movieLimit: 10, tvLimit: 4 },
+  };
 
   const limits = planLimits[planId];
   if (!limits) {
     throw new Error(`Unknown plan ID for Jellyseerr: ${planId}`);
   }
 
+  // Username is required since Jellyseerr uses Emby usernames
+  if (!embyUsername) {
+    console.log(`No username provided for Jellyseerr update, skipping...`);
+    return;
+  }
+
   try {
-    // First, find the user in Jellyseerr by email
-    const usersResponse = await fetch(`${JELLYSEERR_URL}/api/v1/user`, {
+    console.log(`Updating Jellyseerr limits for username: ${embyUsername}, plan: ${planId}`);
+    
+    // Get all users from Jellyseerr
+    const usersResponse = await fetch(`${JELLYSEERR_URL}/api/v1/user?take=1000`, {
+      method: 'GET',
       headers: {
         "X-Api-Key": JELLYSEERR_API_KEY,
-        "Content-Type": "application/json",
+        "Accept": "application/json",
       },
     });
 
     if (!usersResponse.ok) {
+      console.error(`Failed to fetch Jellyseerr users: ${usersResponse.status} - ${await usersResponse.text()}`);
       throw new Error(`Failed to fetch Jellyseerr users: ${usersResponse.status}`);
     }
 
-    const users = await usersResponse.json();
-    const jellyseerrUser = users.find((user: JellyseerrUser) => user.email === email);
+    const responseData = await usersResponse.json();
+    const users = responseData.results || responseData;
+    console.log(`Found ${users.length} users in Jellyseerr`);
+    
+    // Find user by username (case-insensitive) - this should match the Emby username
+    const jellyseerrUser = users.find((user: any) => 
+      user.username?.toLowerCase() === embyUsername.toLowerCase()
+    );
 
     if (!jellyseerrUser) {
-      console.log(`User ${email} not found in Jellyseerr, skipping update`);
+      console.log(`User ${embyUsername} not found in Jellyseerr. They need to login to Jellyseerr first.`);
       return;
     }
 
+    console.log(`Found Jellyseerr user: ID=${jellyseerrUser.id}, username=${jellyseerrUser.username}`);
+
     // Update the user's request limits
+    // Set quotaDays to null to disable Jellyseerr's auto-reset since we manage it
+    const updatePayload = {
+      id: jellyseerrUser.id,
+      permissions: jellyseerrUser.permissions || 2, // Preserve existing permissions
+      movieQuotaLimit: limits.movieLimit,
+      movieQuotaDays: null, // Disable auto-reset
+      tvQuotaLimit: limits.tvLimit,
+      tvQuotaDays: null, // Disable auto-reset
+    };
+
+    console.log(`Updating Jellyseerr user with payload:`, updatePayload);
+
     const updateResponse = await fetch(`${JELLYSEERR_URL}/api/v1/user/${jellyseerrUser.id}`, {
       method: "PUT",
       headers: {
         "X-Api-Key": JELLYSEERR_API_KEY,
         "Content-Type": "application/json",
+        "Accept": "application/json",
       },
-      body: JSON.stringify({
-        movieQuotaLimit: limits.movieLimit,
-        movieQuotaDays: limits.movieLimit === null ? null : 30, // Monthly reset
-        tvQuotaLimit: limits.tvLimit,
-        tvQuotaDays: limits.tvLimit === null ? null : 30, // Monthly reset
-      }),
+      body: JSON.stringify(updatePayload),
     });
 
     if (!updateResponse.ok) {
-      throw new Error(`Failed to update Jellyseerr user limits: ${updateResponse.status}`);
+      const errorText = await updateResponse.text();
+      console.error(`Failed to update Jellyseerr user: ${updateResponse.status} - ${errorText}`);
+      return;
     }
 
-    console.log(`Successfully updated Jellyseerr request limits for user ${email} with plan ${planId}`);
+    console.log(`Successfully updated Jellyseerr request limits for user ${jellyseerrUser.username}`);
+    
   } catch (error) {
     console.error("Error updating Jellyseerr limits:", error);
     // Don't throw - Jellyseerr update failures shouldn't block subscription
   }
 }
-
 
 const accountServiceManager = new AccountServiceManager();
 
@@ -1275,10 +1292,10 @@ exports.processTokenTrade = onCall<ProcessTokenTradeData, Promise<ProcessTokenTr
 );
 
 
-// Update the processSubscription function to include Jellyseerr updates
+// Update the processSubscription function to pass username
 exports.processSubscription = onCall<ProcessSubscriptionData, Promise<ProcessSubscriptionResponse>>(
   async (request) => {
-    const { userId, planId, billingPeriod, duration } = request.data;
+    const { userId, planId, billingPeriod, duration, isUpgrade, proRateCredit } = request.data;
     const auth = request.auth;
 
     if (!auth || auth.uid !== userId) {
@@ -1304,7 +1321,7 @@ exports.processSubscription = onCall<ProcessSubscriptionData, Promise<ProcessSub
     try {
       const plan = SUBSCRIPTION_PLANS[planId];
       const baseTokenCost = billingPeriod === "monthly" ? plan.monthly : plan.yearly;
-      const totalTokenCost = baseTokenCost * duration;
+      let totalTokenCost = baseTokenCost * duration;
 
       const result = await admin.firestore().runTransaction(async (transaction) => {
         const userRef = admin.firestore().doc(`users/${userId}`);
@@ -1316,6 +1333,11 @@ exports.processSubscription = onCall<ProcessSubscriptionData, Promise<ProcessSub
 
         const userData = userDoc.data();
         const currentBalance = userData?.tokenBalance || 0;
+
+        // Apply pro-rate credit if this is an upgrade
+        if (isUpgrade && proRateCredit > 0) {
+          totalTokenCost = Math.max(0, totalTokenCost - proRateCredit);
+        }
 
         if (currentBalance < totalTokenCost) {
           throw new HttpsError("failed-precondition", "Insufficient tokens.");
@@ -1330,18 +1352,37 @@ exports.processSubscription = onCall<ProcessSubscriptionData, Promise<ProcessSub
         const activeSubSnapshot = await transaction.get(activeSubQuery);
 
         let startDate = new Date();
-        if (!activeSubSnapshot.empty) {
-          // If there's an active subscription, start the new one after it ends
-          const activeSub = activeSubSnapshot.docs[0].data();
-          const activeEndDate = activeSub.endDate.toDate();
-          if (activeEndDate > startDate) {
-            startDate = activeEndDate;
-          }
+        let isImmediateUpgrade = false;
 
-          // Update the current subscription to not auto-renew
-          transaction.update(activeSubSnapshot.docs[0].ref, {
-            autoRenew: false,
-          });
+        if (!activeSubSnapshot.empty) {
+          const activeSub = activeSubSnapshot.docs[0].data();
+          const currentPlanId = activeSub.planId;
+          
+          // Determine if this is an upgrade or downgrade
+          const currentPlanIndex = Object.keys(SUBSCRIPTION_PLANS).indexOf(currentPlanId);
+          const newPlanIndex = Object.keys(SUBSCRIPTION_PLANS).indexOf(planId);
+          
+          if (newPlanIndex > currentPlanIndex) {
+            // This is an upgrade - apply immediately
+            isImmediateUpgrade = true;
+            // Cancel the current subscription
+            transaction.update(activeSubSnapshot.docs[0].ref, {
+              status: "upgraded",
+              upgradedAt: admin.firestore.FieldValue.serverTimestamp(),
+            });
+          } else {
+            // This is a downgrade or same plan - schedule for later
+            const activeEndDate = activeSub.endDate.toDate();
+            if (activeEndDate > startDate) {
+              startDate = activeEndDate;
+            }
+            // Mark current subscription to not auto-renew
+            transaction.update(activeSubSnapshot.docs[0].ref, {
+              autoRenew: false,
+              nextPlanId: planId,
+              nextPlanBillingPeriod: billingPeriod,
+            });
+          }
         }
 
         // Calculate end date
@@ -1367,6 +1408,7 @@ exports.processSubscription = onCall<ProcessSubscriptionData, Promise<ProcessSub
           endDate: admin.firestore.Timestamp.fromDate(endDate),
           status: "active",
           autoRenew: false,
+          isUpgrade: isImmediateUpgrade,
           createdAt: admin.firestore.FieldValue.serverTimestamp(),
         });
 
@@ -1383,6 +1425,7 @@ exports.processSubscription = onCall<ProcessSubscriptionData, Promise<ProcessSub
           productId: planId,
           tokenCost: totalTokenCost,
           subscriptionId,
+          isUpgrade: isImmediateUpgrade,
           createdAt: admin.firestore.FieldValue.serverTimestamp(),
         });
 
@@ -1391,26 +1434,29 @@ exports.processSubscription = onCall<ProcessSubscriptionData, Promise<ProcessSub
           endDate: endDate.toISOString(),
           embyUserId: userData?.services?.emby?.serviceUserId,
           email: userData?.email,
+          username: userData?.username,
+          isImmediateUpgrade,
         };
       });
 
-      // Update Emby permissions outside of transaction
-      if (result.embyUserId) {
-        try {
-          await updateEmbySubscriptionPermissions(result.embyUserId, planId);
-        } catch (error) {
-          console.error("Failed to update Emby permissions:", error);
-          // Don't fail the whole operation if Emby update fails
+      // Update services immediately if it's an upgrade or new subscription
+      if (result.isImmediateUpgrade || activeSubSnapshot.empty) {
+        // Update Emby permissions
+        if (result.embyUserId) {
+          try {
+            await updateEmbySubscriptionPermissions(result.embyUserId, planId);
+          } catch (error) {
+            console.error("Failed to update Emby permissions:", error);
+          }
         }
-      }
 
-      // Update Jellyseerr request limits
-      if (result.email) {
-        try {
-          await updateJellyseerrRequestLimits(result.email, planId);
-        } catch (error) {
-          console.error("Failed to update Jellyseerr limits:", error);
-          // Don't fail the whole operation if Jellyseerr update fails
+        // Update Jellyseerr request limits with username
+        if (result.email || result.username) {
+          try {
+            await updateJellyseerrRequestLimits(result.email, planId, result.username);
+          } catch (error) {
+            console.error("Failed to update Jellyseerr limits:", error);
+          }
         }
       }
 
@@ -1427,7 +1473,7 @@ exports.processSubscription = onCall<ProcessSubscriptionData, Promise<ProcessSub
   }
 );
 
-// Also update checkSubscriptionStatus to disable in Jellyseerr when expired
+// Also update checkSubscriptionStatus to pass username when disabling
 exports.checkSubscriptionStatus = onCall<CheckSubscriptionStatusData, Promise<CheckSubscriptionStatusResponse>>(
   async (request) => {
     const { userId } = request.data;
@@ -1464,9 +1510,9 @@ exports.checkSubscriptionStatus = onCall<CheckSubscriptionStatusData, Promise<Ch
           }
           
           // Also disable Jellyseerr requests
-          if (userData?.email) {
+          if (userData?.email || userData?.username) {
             try {
-              await updateJellyseerrRequestLimits(userData.email, "basic"); // basic = no requests
+              await updateJellyseerrRequestLimits(userData.email, "basic", userData.username);
             } catch (error) {
               console.error("Failed to disable Jellyseerr requests:", error);
             }
@@ -1498,9 +1544,9 @@ exports.checkSubscriptionStatus = onCall<CheckSubscriptionStatusData, Promise<Ch
           }
           
           // Also disable Jellyseerr requests
-          if (userData?.email) {
+          if (userData?.email || userData?.username) {
             try {
-              await updateJellyseerrRequestLimits(userData.email, "basic");
+              await updateJellyseerrRequestLimits(userData.email, "basic", userData.username);
             } catch (error) {
               console.error("Failed to disable Jellyseerr requests:", error);
             }

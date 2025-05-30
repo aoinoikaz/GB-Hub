@@ -127,7 +127,7 @@ const subscriptionPlans: SubscriptionPlan[] = [
   },
 ];
 
-// Booster Packs for power users
+
 const boosterPacks = [
   {
     id: "movie-booster-5",
@@ -164,10 +164,12 @@ const boosterPacks = [
     id: "ultra-booster",
     name: "Ultra Pack",
     tokens: 300,
-    description: "Unlimited requests for 1 month",
+    description: "+20 movies & +10 TV shows this month",  // Changed from "Unlimited"
     icon: <Lightning size={20} />,
     color: "yellow",
-    type: "unlimited",
+    type: "mega",
+    movieAmount: 20,
+    tvAmount: 10,
   },
 ];
 
@@ -455,8 +457,9 @@ const MediaDashboard = () => {
                     )}
                   </div>
                 )}
+                
                 {/* Booster Packs Button */}
-                {currentPlan && currentPlan !== "ultimate" && (
+                {currentPlan && (  // Removed the check for !== "ultimate"
                   <button
                     onClick={() => setShowBoosterPacks(!showBoosterPacks)}
                     className="mt-3 text-sm bg-gradient-to-r from-orange-500 to-red-500 px-3 py-1 rounded-md hover:opacity-90 transition flex items-center gap-2"

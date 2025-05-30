@@ -1295,7 +1295,6 @@ exports.processTokenTrade = onCall<ProcessTokenTradeData, Promise<ProcessTokenTr
   }
 );
 
-
 // Update the processSubscription function to pass embyUserId instead of username
 exports.processSubscription = onCall<ProcessSubscriptionData, Promise<ProcessSubscriptionResponse>>(
   async (request) => {
@@ -1306,7 +1305,21 @@ exports.processSubscription = onCall<ProcessSubscriptionData, Promise<ProcessSub
       throw new HttpsError("unauthenticated", "User must be authenticated.");
     }
 
-    // ... validation code stays the same ...
+    if (!userId || !planId || !billingPeriod || !duration) {
+      throw new HttpsError("invalid-argument", "Missing required fields.");
+    }
+
+    if (!SUBSCRIPTION_PLANS[planId]) {
+      throw new HttpsError("invalid-argument", "Invalid plan ID.");
+    }
+
+    if (billingPeriod !== "monthly" && billingPeriod !== "yearly") {
+      throw new HttpsError("invalid-argument", "Billing period must be 'monthly' or 'yearly'.");
+    }
+
+    if (typeof duration !== "number" || duration <= 0) {
+      throw new HttpsError("invalid-argument", "Duration must be a positive number.");
+    }
 
     try {
       const plan = SUBSCRIPTION_PLANS[planId];
@@ -1423,8 +1436,8 @@ exports.processSubscription = onCall<ProcessSubscriptionData, Promise<ProcessSub
         return {
           subscriptionId,
           endDate: endDate.toISOString(),
-          embyUserId: userData?.services?.emby?.serviceUserId,
-          email: userData?.email,
+          embyUserId: userData?.services?.emby?.serviceUserId || null,
+          email: userData?.email || null,
           isImmediateUpgrade,
         };
       });
@@ -1462,7 +1475,6 @@ exports.processSubscription = onCall<ProcessSubscriptionData, Promise<ProcessSub
     }
   }
 );
-
 
 // Also update checkSubscriptionStatus to pass embyUserId when disabling
 exports.checkSubscriptionStatus = onCall<CheckSubscriptionStatusData, Promise<CheckSubscriptionStatusResponse>>(
@@ -1503,7 +1515,7 @@ exports.checkSubscriptionStatus = onCall<CheckSubscriptionStatusData, Promise<Ch
           // Also disable Jellyseerr requests using Emby user ID
           if (embyService?.serviceUserId) {
             try {
-              await updateJellyseerrRequestLimits(userData.email, "basic", embyService.serviceUserId);
+              await updateJellyseerrRequestLimits(userData?.email || "", "basic", embyService.serviceUserId);
             } catch (error) {
               console.error("Failed to disable Jellyseerr requests:", error);
             }
@@ -1537,7 +1549,7 @@ exports.checkSubscriptionStatus = onCall<CheckSubscriptionStatusData, Promise<Ch
           // Also disable Jellyseerr requests using Emby user ID
           if (embyService?.serviceUserId) {
             try {
-              await updateJellyseerrRequestLimits(userData.email, "basic", embyService.serviceUserId);
+              await updateJellyseerrRequestLimits(userData?.email || "", "basic", embyService.serviceUserId);
             } catch (error) {
               console.error("Failed to disable Jellyseerr requests:", error);
             }

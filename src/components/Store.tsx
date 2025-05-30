@@ -81,7 +81,7 @@ const Store = () => {
   const navigate = useNavigate();
   const [{ isPending, isResolved, isRejected }] = usePayPalScriptReducer();
   const [tokenBalance, setTokenBalance] = useState<number>(0);
-  const [selectedTokenPackage, setSelectedTokenPackage] = useState<"60" | "120" | "600" | "1200" | null>(null);
+const [selectedTokenPackage, setSelectedTokenPackage] = useState<"50" | "100" | "300" | "600" | "1200" | "2500" | null>(null);
   const [isCreatingOrder, setIsCreatingOrder] = useState<boolean>(false);
   const [tradeRecipientUsername, setTradeRecipientUsername] = useState<string>("");
   const [tradeRecipientExists, setTradeRecipientExists] = useState<boolean | null>(null);

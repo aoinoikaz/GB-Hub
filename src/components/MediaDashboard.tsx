@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { doc, getDoc } from "firebase/firestore";
 import { db } from "../config/firebase";
 import { useAuth } from "../context/auth-context";
-import { Info, Spinner, Monitor, Download, FilmSlate, Television, Users, Crown, Star, Check, X } from "phosphor-react";
+import { Info, Spinner, Monitor, Download, FilmSlate, Television, Users, Crown, Star, Check, X, Rocket, Lightning, Zap } from "phosphor-react";
 import { getFunctions, httpsCallable } from "firebase/functions";
 import { useNavigate } from "react-router-dom";
 
@@ -24,6 +24,10 @@ interface CheckSubscriptionStatusResponse {
     status: string;
     autoRenew: boolean;
     daysRemaining: number;
+    // Monthly request tracking
+    movieRequestsUsed?: number;
+    tvRequestsUsed?: number;
+    lastResetDate?: string;
   };
 }
 
@@ -69,7 +73,7 @@ const subscriptionPlans: SubscriptionPlan[] = [
       streams: 1,
       downloads: true,
       movieRequests: 1,
-      tvRequests: 1,
+      tvRequests: 0, // No TV requests
       support: "standard",
     },
     icon: <Download size={24} />,
@@ -84,7 +88,7 @@ const subscriptionPlans: SubscriptionPlan[] = [
       streams: 2,
       downloads: true,
       movieRequests: 2,
-      tvRequests: 1,
+      tvRequests: 1, // First TV tier!
       support: "standard",
     },
     icon: <Users size={24} />,
@@ -138,6 +142,50 @@ const subscriptionPlans: SubscriptionPlan[] = [
   },
 ];
 
+// Booster Packs for power users
+const boosterPacks = [
+  {
+    id: "movie-booster-5",
+    name: "Movie Pack +5",
+    tokens: 50,
+    description: "Add 5 movie requests this month",
+    icon: <FilmSlate size={20} />,
+    color: "orange",
+    type: "movie",
+    amount: 5,
+  },
+  {
+    id: "tv-booster-3",
+    name: "TV Pack +3",
+    tokens: 60,
+    description: "Add 3 TV show requests this month",
+    icon: <Television size={20} />,
+    color: "teal",
+    type: "tv",
+    amount: 3,
+  },
+  {
+    id: "mega-booster",
+    name: "Mega Booster",
+    tokens: 150,
+    description: "+10 movies & +5 TV shows this month",
+    icon: <Rocket size={20} />,
+    color: "purple",
+    type: "both",
+    movieAmount: 10,
+    tvAmount: 5,
+  },
+  {
+    id: "ultra-booster",
+    name: "Ultra Pack",
+    tokens: 300,
+    description: "Unlimited requests for 1 month",
+    icon: <Lightning size={20} />,
+    color: "yellow",
+    type: "unlimited",
+  },
+];
+
 const MediaDashboard = () => {
   const { user, loading: authLoading } = useAuth();
   const navigate = useNavigate();
@@ -154,6 +202,8 @@ const MediaDashboard = () => {
   const [billingPeriod, setBillingPeriod] = useState<"monthly" | "yearly">("monthly");
   const [duration, setDuration] = useState<number>(1);
   const [redeeming, setRedeeming] = useState(false);
+  const [showBoosterPacks, setShowBoosterPacks] = useState(false);
+  const [purchasingBooster, setPurchasingBooster] = useState<string | null>(null);
   const functions = getFunctions();
 
   // Check subscription status
@@ -197,7 +247,6 @@ const MediaDashboard = () => {
           if (embyService?.linked) {
             setIsLinked(true);
             setUsername(user.displayName || "Not set");
-            // Check subscription status via cloud function
             await checkSubscriptionStatus();
           } else {
             setIsLinked(false);
@@ -222,7 +271,7 @@ const MediaDashboard = () => {
 
   const handleActivate = async () => {
     if (!user) return;
-    setActivating(activating);
+    setActivating(true);
     setError(null);
 
     try {
@@ -251,6 +300,29 @@ const MediaDashboard = () => {
     return baseTokens * multiplier;
   };
 
+  const calculateProrate = () => {
+    if (!currentPlan || !selectedPlan || !activeSubscription) return 0;
+    
+    const currentPlanData = subscriptionPlans.find(p => p.id === currentPlan);
+    const newPlanData = subscriptionPlans.find(p => p.id === selectedPlan);
+    
+    if (!currentPlanData || !newPlanData) return 0;
+    
+    // Calculate remaining days
+    const endDate = new Date(activeSubscription.endDate);
+    const now = new Date();
+    const totalDays = Math.ceil((endDate.getTime() - new Date(activeSubscription.startDate).getTime()) / (1000 * 60 * 60 * 24));
+    const remainingDays = Math.ceil((endDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+    const usedDays = totalDays - remainingDays;
+    
+    // Calculate prorated amount
+    const currentPlanTokens = activeSubscription.billingPeriod === "monthly" ? currentPlanData.monthlyTokens : currentPlanData.yearlyTokens;
+    const usedTokens = Math.floor((currentPlanTokens * usedDays) / totalDays);
+    const unusedTokens = currentPlanTokens - usedTokens;
+    
+    return unusedTokens;
+  };
+
   const handleRedeemSubscription = async () => {
     if (!selectedPlan || !user) return;
     
@@ -258,13 +330,24 @@ const MediaDashboard = () => {
     setError(null);
 
     try {
-      const tokenCost = calculateTokenCost();
+      let tokenCost = calculateTokenCost();
+      const proRateCredit = calculateProrate();
+      
+      // Apply pro-rate credit for upgrades
+      if (currentPlan && selectedPlan !== currentPlan && proRateCredit > 0) {
+        const currentPlanIndex = subscriptionPlans.findIndex(p => p.id === currentPlan);
+        const newPlanIndex = subscriptionPlans.findIndex(p => p.id === selectedPlan);
+        
+        if (newPlanIndex > currentPlanIndex) {
+          // Upgrade - apply credit
+          tokenCost = Math.max(0, tokenCost - proRateCredit);
+        }
+      }
       
       if (tokenBalance < tokenCost) {
         throw new Error("Insufficient tokens for this subscription");
       }
 
-      // Process subscription via cloud function
       const processSubscription = httpsCallable<any, ProcessSubscriptionResponse>(
         functions, 
         "processSubscription"
@@ -275,10 +358,11 @@ const MediaDashboard = () => {
         planId: selectedPlan,
         billingPeriod,
         duration,
+        isUpgrade: currentPlan && selectedPlan !== currentPlan,
+        proRateCredit: currentPlan && selectedPlan !== currentPlan ? proRateCredit : 0,
       });
 
       if (result.data.success) {
-        // Refresh user data
         const userRef = doc(db, `users/${user.uid}`);
         const userSnap = await getDoc(userRef);
         if (userSnap.exists()) {
@@ -286,13 +370,11 @@ const MediaDashboard = () => {
           setTokenBalance(data.tokenBalance || 0);
         }
 
-        // Check subscription status again
         await checkSubscriptionStatus();
         
         setSelectedPlan(null);
         setDuration(1);
         
-        // Activate the account if not already active
         if (subscriptionStatus !== "active") {
           await handleActivate();
         }
@@ -303,6 +385,46 @@ const MediaDashboard = () => {
       console.error("Redemption error:", err);
     } finally {
       setRedeeming(false);
+    }
+  };
+
+  const handlePurchaseBooster = async (boosterId: string) => {
+    if (!user) return;
+    
+    setPurchasingBooster(boosterId);
+    setError(null);
+
+    try {
+      const booster = boosterPacks.find(b => b.id === boosterId);
+      if (!booster) throw new Error("Invalid booster pack");
+
+      if (tokenBalance < booster.tokens) {
+        throw new Error("Insufficient tokens for this booster pack");
+      }
+
+      const purchaseBooster = httpsCallable(functions, "purchaseBoosterPack");
+      const result = await purchaseBooster({
+        userId: user.uid,
+        boosterId,
+      });
+
+      if (result.data) {
+        // Refresh user data
+        const userRef = doc(db, `users/${user.uid}`);
+        const userSnap = await getDoc(userRef);
+        if (userSnap.exists()) {
+          const data = userSnap.data();
+          setTokenBalance(data.tokenBalance || 0);
+        }
+
+        // Refresh subscription status
+        await checkSubscriptionStatus();
+      }
+    } catch (err: any) {
+      setError(err.message || "Failed to purchase booster pack");
+      console.error("Booster purchase error:", err);
+    } finally {
+      setPurchasingBooster(null);
     }
   };
 
@@ -321,6 +443,10 @@ const MediaDashboard = () => {
   }
 
   const tokenCost = calculateTokenCost();
+  const proRateCredit = calculateProrate();
+  const finalCost = currentPlan && selectedPlan !== currentPlan && proRateCredit > 0 
+    ? Math.max(0, tokenCost - proRateCredit) 
+    : tokenCost;
 
   return (
     <div className="p-6 bg-gray-900 text-white rounded-lg">
@@ -347,9 +473,40 @@ const MediaDashboard = () => {
               </p>
             )}
             {activeSubscription && (
-              <p className="text-sm text-gray-400 mt-2">
-                {activeSubscription.daysRemaining} days remaining • Expires {new Date(activeSubscription.endDate).toLocaleDateString()}
-              </p>
+              <>
+                <p className="text-sm text-gray-400 mt-2">
+                  {activeSubscription.daysRemaining} days remaining • Expires {new Date(activeSubscription.endDate).toLocaleDateString()}
+                </p>
+                {/* Request Usage */}
+                {currentPlan && currentPlan !== "basic" && (
+                  <div className="mt-3 flex gap-4">
+                    <div className="flex items-center gap-2">
+                      <FilmSlate size={16} className="text-orange-400" />
+                      <span className="text-sm">
+                        Movies: {activeSubscription.movieRequestsUsed || 0}/{subscriptionPlans.find(p => p.id === currentPlan)?.features.movieRequests || 0}
+                      </span>
+                    </div>
+                    {subscriptionPlans.find(p => p.id === currentPlan)?.features.tvRequests !== 0 && (
+                      <div className="flex items-center gap-2">
+                        <Television size={16} className="text-teal-400" />
+                        <span className="text-sm">
+                          TV: {activeSubscription.tvRequestsUsed || 0}/{subscriptionPlans.find(p => p.id === currentPlan)?.features.tvRequests || 0}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                )}
+                {/* Booster Packs Button */}
+                {currentPlan && currentPlan !== "ultimate" && (
+                  <button
+                    onClick={() => setShowBoosterPacks(!showBoosterPacks)}
+                    className="mt-3 text-sm bg-gradient-to-r from-orange-500 to-red-500 px-3 py-1 rounded-md hover:opacity-90 transition flex items-center gap-2"
+                  >
+                    <Zap size={16} />
+                    {showBoosterPacks ? "Hide" : "Show"} Booster Packs
+                  </button>
+                )}
+              </>
             )}
           </div>
           <div className="text-right">
@@ -380,6 +537,53 @@ const MediaDashboard = () => {
         </div>
       ) : (
         <>
+          {/* Booster Packs Section */}
+          {showBoosterPacks && activeSubscription && (
+            <div className="mb-6 p-4 bg-gray-800 rounded-lg">
+              <h3 className="text-xl font-semibold mb-4 flex items-center">
+                <Zap size={24} className="mr-2 text-yellow-400" />
+                Power-Up Booster Packs
+              </h3>
+              <p className="text-sm text-gray-400 mb-4">
+                Need more requests this month? Get instant access with booster packs!
+              </p>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {boosterPacks.map((booster) => (
+                  <div
+                    key={booster.id}
+                    className={`p-4 border-2 rounded-lg border-gray-700 hover:border-${booster.color}-500 transition`}
+                  >
+                    <div className={`flex items-center mb-2 text-${booster.color}-400`}>
+                      {booster.icon}
+                      <h4 className="text-lg font-semibold ml-2">{booster.name}</h4>
+                    </div>
+                    <p className="text-sm text-gray-300 mb-3">{booster.description}</p>
+                    <div className="flex justify-between items-center">
+                      <p className="text-xl font-bold text-yellow-400">{booster.tokens} tokens</p>
+                      <button
+                        onClick={() => handlePurchaseBooster(booster.id)}
+                        disabled={purchasingBooster === booster.id || tokenBalance < booster.tokens}
+                        className={`px-4 py-2 rounded-md text-sm font-semibold transition ${
+                          purchasingBooster === booster.id || tokenBalance < booster.tokens
+                            ? "bg-gray-600 cursor-not-allowed opacity-50"
+                            : `bg-gradient-to-r from-${booster.color}-500 to-${booster.color}-600 hover:opacity-90`
+                        } text-white`}
+                      >
+                        {purchasingBooster === booster.id ? (
+                          <Spinner size={16} className="animate-spin" />
+                        ) : tokenBalance < booster.tokens ? (
+                          "Not enough tokens"
+                        ) : (
+                          "Buy Now"
+                        )}
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
           {/* Subscription Plans */}
           <div className="mb-6">
             <h2 className="text-2xl font-bold mb-4">
@@ -475,9 +679,7 @@ const MediaDashboard = () => {
                         ? "No movie requests"
                         : plan.features.movieRequests === "unlimited"
                         ? "Unlimited movie requests"
-                        : billingPeriod === "monthly"
-                        ? `${plan.features.movieRequests} movie request${plan.features.movieRequests > 1 ? "s" : ""}/month`
-                        : `${plan.features.movieRequests * 12} movie requests/year`}
+                        : `${plan.features.movieRequests} movie request${plan.features.movieRequests > 1 ? "s" : ""}/month`}
                     </li>
                     <li className="flex items-center">
                       <Television size={16} className="mr-2 text-gray-400" />
@@ -485,9 +687,7 @@ const MediaDashboard = () => {
                         ? "No TV requests"
                         : plan.features.tvRequests === "unlimited"
                         ? "Unlimited TV requests"
-                        : billingPeriod === "monthly"
-                        ? `${plan.features.tvRequests} TV show${plan.features.tvRequests > 1 ? "s" : ""}/month`
-                        : `${plan.features.tvRequests * 12} TV shows/year`}
+                        : `${plan.features.tvRequests} TV show${plan.features.tvRequests > 1 ? "s" : ""}/month`}
                     </li>
                     <li className="flex items-center">
                       {plan.features.support === "priority" ? (
@@ -536,40 +736,68 @@ const MediaDashboard = () => {
                 <div className="flex items-end">
                   <div className="w-full">
                     <p className="text-gray-300 mb-2">Total Cost</p>
-                    <p className="text-2xl font-bold text-yellow-400">{tokenCost} tokens</p>
-                    {tokenBalance < tokenCost && (
+                    <p className="text-2xl font-bold text-yellow-400">
+                      {finalCost} tokens
+                      {proRateCredit > 0 && currentPlan && selectedPlan !== currentPlan && (
+                        <span className="text-sm text-green-400 ml-2">
+                          (Pro-rate credit: {proRateCredit} tokens)
+                        </span>
+                      )}
+                    </p>
+                    {tokenBalance < finalCost && (
                       <p className="text-red-400 text-sm mt-1">
-                        You need {tokenCost - tokenBalance} more tokens
+                        You need {finalCost - tokenBalance} more tokens
                       </p>
                     )}
                   </div>
                 </div>
               </div>
               
+              {/* Show pro-rate info for plan changes */}
+              {currentPlan && selectedPlan !== currentPlan && (
+                <div className="mb-4 p-3 bg-gray-700 rounded-md">
+                  <p className="text-sm text-gray-300">
+                    {subscriptionPlans.findIndex(p => p.id === selectedPlan) > 
+                     subscriptionPlans.findIndex(p => p.id === currentPlan) ? (
+                      <>
+                        <span className="text-green-400 font-semibold">Upgrade Benefits:</span> Immediate access to new features. 
+                        Pro-rated credit of {proRateCredit} tokens applied from your current plan.
+                      </>
+                    ) : (
+                      <>
+                        <span className="text-yellow-400 font-semibold">Downgrade Notice:</span> Features will be adjusted at the end of your current billing period.
+                        No immediate changes to your current plan.
+                      </>
+                    )}
+                  </p>
+                </div>
+              )}
+              
               <div className="flex gap-4">
                 <button
                   onClick={handleRedeemSubscription}
-                  disabled={redeeming || tokenBalance < tokenCost || (activeSubscription && selectedPlan === currentPlan)}
+                  disabled={redeeming || tokenBalance < finalCost || (activeSubscription && selectedPlan === currentPlan)}
                   className={`flex-1 py-2 px-4 rounded-md font-semibold transition ${
-                    redeeming || tokenBalance < tokenCost || (activeSubscription && selectedPlan === currentPlan)
+                    redeeming || tokenBalance < finalCost || (activeSubscription && selectedPlan === currentPlan)
                       ? "bg-gray-600 cursor-not-allowed opacity-50"
                       : "bg-gradient-to-r from-purple-500 to-pink-500 hover:opacity-90"
                   } text-white`}
                 >
                   {redeeming ? (
                     <Spinner size={20} className="animate-spin mx-auto" />
-                  ) : tokenBalance < tokenCost ? (
+                  ) : tokenBalance < finalCost ? (
                     "Insufficient Tokens"
                   ) : activeSubscription && selectedPlan === currentPlan ? (
                     "Already Subscribed"
                   ) : activeSubscription ? (
-                    "Upgrade Plan"
+                    subscriptionPlans.findIndex(p => p.id === selectedPlan) > 
+                    subscriptionPlans.findIndex(p => p.id === currentPlan) ? "Upgrade Now" : "Schedule Downgrade"
                   ) : (
                     "Subscribe Now"
                   )}
                 </button>
                 
-                {tokenBalance < tokenCost && (
+                {tokenBalance < finalCost && (
                   <button
                     onClick={() => navigate("/store")}
                     className="py-2 px-4 bg-purple-600 text-white rounded-md hover:bg-purple-700 transition"

@@ -1617,3 +1617,4 @@ exports.uploadProfileImage = onCall<UploadProfileImageData>(async (request) => {
     throw new HttpsError("internal", `Failed to upload profile image: ${errorMessage}`);
   }
 });
+

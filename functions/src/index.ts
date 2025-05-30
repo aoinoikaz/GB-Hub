@@ -145,6 +145,8 @@ interface ProcessSubscriptionData {
   planId: string;
   billingPeriod: "monthly" | "yearly";
   duration: number;
+  isUpgrade?: boolean;      // Add this
+  proRateCredit?: number;   // Add this
 }
 
 interface ProcessSubscriptionResponse {
@@ -1292,7 +1294,7 @@ exports.processTokenTrade = onCall<ProcessTokenTradeData, Promise<ProcessTokenTr
 );
 
 
-// Update the processSubscription function to pass username
+// 2. Fix the processSubscription function to handle activeSubSnapshot scope:
 exports.processSubscription = onCall<ProcessSubscriptionData, Promise<ProcessSubscriptionResponse>>(
   async (request) => {
     const { userId, planId, billingPeriod, duration, isUpgrade, proRateCredit } = request.data;
@@ -1323,6 +1325,15 @@ exports.processSubscription = onCall<ProcessSubscriptionData, Promise<ProcessSub
       const baseTokenCost = billingPeriod === "monthly" ? plan.monthly : plan.yearly;
       let totalTokenCost = baseTokenCost * duration;
 
+      // Check if there's an active subscription BEFORE the transaction
+      const activeSubQuery = admin
+        .firestore()
+        .collection("subscriptions")
+        .where("userId", "==", userId)
+        .where("status", "==", "active");
+      const activeSubSnapshot = await activeSubQuery.get();
+      const hasActiveSubscription = !activeSubSnapshot.empty;
+
       const result = await admin.firestore().runTransaction(async (transaction) => {
         const userRef = admin.firestore().doc(`users/${userId}`);
         const userDoc = await transaction.get(userRef);
@@ -1335,7 +1346,7 @@ exports.processSubscription = onCall<ProcessSubscriptionData, Promise<ProcessSub
         const currentBalance = userData?.tokenBalance || 0;
 
         // Apply pro-rate credit if this is an upgrade
-        if (isUpgrade && proRateCredit > 0) {
+        if (isUpgrade && proRateCredit && proRateCredit > 0) {
           totalTokenCost = Math.max(0, totalTokenCost - proRateCredit);
         }
 
@@ -1343,18 +1354,10 @@ exports.processSubscription = onCall<ProcessSubscriptionData, Promise<ProcessSub
           throw new HttpsError("failed-precondition", "Insufficient tokens.");
         }
 
-        // Check for existing active subscription
-        const activeSubQuery = admin
-          .firestore()
-          .collection("subscriptions")
-          .where("userId", "==", userId)
-          .where("status", "==", "active");
-        const activeSubSnapshot = await transaction.get(activeSubQuery);
-
         let startDate = new Date();
         let isImmediateUpgrade = false;
 
-        if (!activeSubSnapshot.empty) {
+        if (hasActiveSubscription) {
           const activeSub = activeSubSnapshot.docs[0].data();
           const currentPlanId = activeSub.planId;
           
@@ -1440,7 +1443,7 @@ exports.processSubscription = onCall<ProcessSubscriptionData, Promise<ProcessSub
       });
 
       // Update services immediately if it's an upgrade or new subscription
-      if (result.isImmediateUpgrade || activeSubSnapshot.empty) {
+      if (result.isImmediateUpgrade || !hasActiveSubscription) {
         // Update Emby permissions
         if (result.embyUserId) {
           try {

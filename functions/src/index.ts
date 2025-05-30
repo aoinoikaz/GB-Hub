@@ -21,6 +21,7 @@ let secretsConfig: {
   PAYPAL_CLIENT_ID_SANDBOX: string;
   PAYPAL_SECRET_SANDBOX: string;
   PAYPAL_API_BASE_SANDBOX: string;
+  JELLYSEERR_API_KEY: string;
 } | null = null;
 
 async function getSecretsConfig() {
@@ -670,8 +671,8 @@ async function updateEmbySubscriptionPermissions(embyUserId: string, planId: str
 
 // Add this function to update Jellyseerr request limits
 async function updateJellyseerrRequestLimits(email: string, planId: string): Promise<void> {
-  const secrets = await getSecretsConfig();
-  const JELLYSEERR_API_KEY = await getSecret('JELLYSEERR_API_KEY'); // Add this to your secrets
+const secrets = await getSecretsConfig();
+  const JELLYSEERR_API_KEY = secrets.JELLYSEERR_API_KEY;
   
   // Map subscription plans to Jellyseerr request limits
   const planLimits: { [key: string]: { movieLimit: number | null; tvLimit: number | null } } = {

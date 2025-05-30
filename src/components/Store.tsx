@@ -241,10 +241,12 @@ const Store = () => {
   };
 
   const tokenPackages = {
-    "60": { amount: "5.00", currency: "USD", bonus: 0 },
-    "120": { amount: "10.00", currency: "USD", bonus: 0 },
-    "600": { amount: "45.00", currency: "USD", bonus: 60 }, // 10% bonus
-    "1200": { amount: "85.00", currency: "USD", bonus: 180 }, // 15% bonus
+    "50": { amount: "5.00", currency: "USD", bonus: 0 },
+    "100": { amount: "10.00", currency: "USD", bonus: 0 },
+    "300": { amount: "27.00", currency: "USD", bonus: 30 }, // 10% bonus (pay for 270, get 300)
+    "600": { amount: "48.00", currency: "USD", bonus: 120 }, // 20% bonus (pay for 480, get 600)
+    "1200": { amount: "84.00", currency: "USD", bonus: 360 }, // 30% bonus (pay for 840, get 1200)
+    "2500": { amount: "150.00", currency: "USD", bonus: 1000 }, // 40% bonus (pay for 1500, get 2500)
   };
 
   const handleCreateOrder = async (_data: any, actions: CustomCreateOrderActions) => {

@@ -231,8 +231,8 @@ class EmbyService implements ServiceHandler {
       EnableSharedDeviceControl: false,
       EnableContentDownloading: false,
       EnableSyncTranscoding: false,
-      EnableSubtitleDownloading: false,
-      EnableSubtitleManagement: false,
+      EnableSubtitleDownloading: true,  // Allow subtitle downloading
+      EnableSubtitleManagement: false,  // But not deletion
       AllowCameraUpload: false,
       EnableMediaConversion: false,
       EnablePublicSharing: false,
@@ -587,17 +587,62 @@ async function disableEmbyAccount(embyUserId: string): Promise<void> {
   }
 }
 
-
 async function updateEmbySubscriptionPermissions(embyUserId: string, planId: string): Promise<void> {
   const secrets = await getSecretsConfig();
   
-  // Map subscription plans to Emby permissions
+  // Base template - everything disabled by default
+  const basePolicy = {
+    IsAdministrator: false,
+    EnableRemoteAccess: true,
+    EnableMediaPlayback: true,
+    EnableAudioPlaybackTranscoding: true,
+    EnableVideoPlaybackTranscoding: true,
+    EnablePlaybackRemuxing: true,
+    EnableLiveTvAccess: false,
+    EnableLiveTvManagement: false,
+    RemoteClientBitrateLimit: 0,
+    EnableContentDeletion: false,
+    RestrictedFeatures: ["notifications"],
+    EnableRemoteControlOfOtherUsers: false,
+    EnableSharedDeviceControl: false,
+    EnableSyncTranscoding: false,
+    EnableSubtitleDownloading: true,  // Allow subtitle downloading
+    EnableSubtitleManagement: false,   // But not deletion
+    AllowCameraUpload: false,
+    EnableMediaConversion: false,
+    EnablePublicSharing: false,
+    EnableSocialSharing: false,
+    EnableUserPreferenceAccess: false,
+    IsDisabled: false,  // Make sure account is active
+    IsHidden: true,
+    IsHiddenRemotely: false,
+    IsHiddenFromUnusedDevices: true,
+    EnableAllFolders: true,
+    EnableAllChannels: true,
+  };
+
+  // Plan-specific permissions (only what changes from base)
   const planPermissions: { [key: string]: any } = {
-    basic: { SimultaneousStreamLimit: 1, EnableContentDownloading: false },
-    standard: { SimultaneousStreamLimit: 1, EnableContentDownloading: true },
-    duo: { SimultaneousStreamLimit: 2, EnableContentDownloading: true },
-    family: { SimultaneousStreamLimit: 4, EnableContentDownloading: true },
-    ultimate: { SimultaneousStreamLimit: 0, EnableContentDownloading: true }, // 0 = unlimited streams
+    basic: { 
+      SimultaneousStreamLimit: 1, 
+      EnableContentDownloading: false 
+    },
+    standard: { 
+      SimultaneousStreamLimit: 1, 
+      EnableContentDownloading: true 
+    },
+    duo: { 
+      SimultaneousStreamLimit: 2, 
+      EnableContentDownloading: true 
+    },
+    family: { 
+      SimultaneousStreamLimit: 4, 
+      EnableContentDownloading: true 
+    },
+    ultimate: { 
+      SimultaneousStreamLimit: 10,  // Changed from 0 to 10 as per your comment
+      EnableContentDownloading: true 
+    },
   };
 
   const permissions = planPermissions[planId];
@@ -605,48 +650,10 @@ async function updateEmbySubscriptionPermissions(embyUserId: string, planId: str
     throw new Error(`Unknown plan ID: ${planId}`);
   }
 
-  // Get current user policy
-  const userResponse = await fetch(`${EMBY_BASE_URL}/Users/${embyUserId}`, {
-    headers: { "X-Emby-Token": secrets.EMBY_API_KEY },
-  });
-
-  if (!userResponse.ok) {
-    throw new Error(`Failed to get Emby user: ${userResponse.status}`);
-  }
-
-  const userData = await userResponse.json();
-  const currentPolicy = userData.Policy || {};
-
-  // CRITICAL FIX: If user is disabled, enable them first
-  if (currentPolicy.IsDisabled) {
-    console.log(`User ${embyUserId} is disabled. Enabling first...`);
-    
-    // First, just enable the user
-    const enableResponse = await fetch(`${EMBY_BASE_URL}/Users/${embyUserId}/Policy`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "X-Emby-Token": secrets.EMBY_API_KEY,
-      },
-      body: JSON.stringify({ 
-        ...currentPolicy,
-        IsDisabled: false 
-      }),
-    });
-
-    if (!enableResponse.ok) {
-      throw new Error(`Failed to enable Emby user: ${enableResponse.status}`);
-    }
-    
-    // Small delay to ensure the enable takes effect
-    await new Promise(resolve => setTimeout(resolve, 500));
-  }
-
-  // Now merge with new permissions while keeping your existing policy structure
+  // Merge base policy with plan-specific permissions
   const updatedPolicy = {
-    ...currentPolicy,
-    ...permissions,
-    IsDisabled: false, // Ensure account stays active
+    ...basePolicy,
+    ...permissions
   };
 
   // Update user policy
@@ -665,7 +672,6 @@ async function updateEmbySubscriptionPermissions(embyUserId: string, planId: str
   
   console.log(`Successfully updated Emby permissions for user ${embyUserId} with plan ${planId}`);
 }
-
 
 // Add this function to update Jellyseerr request limits
 async function updateJellyseerrRequestLimits(email: string, planId: string): Promise<void> {

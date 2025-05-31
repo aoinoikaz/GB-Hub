@@ -454,7 +454,7 @@ class AccountServiceManager {
 
     await userRef.set(userData, { merge: true });
     console.log(`Syncing new user ${username} to Jellyseerr`);
-    await syncJellyseerrUsers();
+    await syncJellyseerrUser(userData.services[serviceName].serviceUserId);
   }
 
   async syncPassword(username: string, newPassword: string): Promise<void> {
@@ -784,18 +784,19 @@ async function updateJellyseerrRequestLimits(
   }
 }
 
-
-async function syncJellyseerrUsers(): Promise<boolean> {
+async function syncJellyseerrUser(embyUserId: string): Promise<boolean> {
   const secrets = await getSecretsConfig();
   
   try {
-    const response = await fetch(`${JELLYSEERR_URL}/api/v1/settings/jellyfin/users`, {
+    const response = await fetch(`${JELLYSEERR_URL}/api/v1/user/import-from-jellyfin`, {
       method: 'POST',
       headers: {
         'X-Api-Key': secrets.JELLYSEERR_API_KEY,
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({})
+      body: JSON.stringify({
+        jellyfinUserIds: [embyUserId]
+      })
     });
     
     if (!response.ok) {
@@ -803,7 +804,7 @@ async function syncJellyseerrUsers(): Promise<boolean> {
       return false;
     }
     
-    console.log('Jellyseerr user sync completed');
+    console.log(`Jellyseerr user ${embyUserId} sync completed`);
     return true;
   } catch (error) {
     console.error('Error syncing Jellyseerr:', error);
@@ -1568,7 +1569,7 @@ exports.processSubscription = onCall<ProcessSubscriptionData, Promise<ProcessSub
         if (result.embyUserId) {
           try {
             await updateEmbySubscriptionPermissions(result.embyUserId, planId);
-            await syncJellyseerrUsers();
+            await syncJellyseerrUser(result.embyUserId);
             await updateJellyseerrRequestLimits(result.email, planId, result.embyUserId);
           } catch (error) {
             console.error("Failed to update services:", error);

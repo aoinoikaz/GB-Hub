@@ -614,10 +614,6 @@ async function updateEmbySubscriptionPermissions(embyUserId: string, planId: str
 
   // Plan-specific permissions (only what changes from base)
   const planPermissions: { [key: string]: any } = {
-    basic: { 
-      SimultaneousStreamLimit: 1, 
-      EnableContentDownloading: false 
-    },
     standard: { 
       SimultaneousStreamLimit: 1, 
       EnableContentDownloading: true 

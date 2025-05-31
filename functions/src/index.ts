@@ -1664,7 +1664,7 @@ exports.checkSubscriptionStatus = onCall<CheckSubscriptionStatusData, Promise<Ch
           console.log(`Processing scheduled downgrade for user ${userId}`);
           
           try {
-            // Create new subscription with downgraded plan
+            // Get downgrade details
             const newPlan = subData.scheduledDowngrade.planId;
             const newBillingPeriod = subData.scheduledDowngrade.billingPeriod;
             const newDuration = subData.scheduledDowngrade.duration;
@@ -1683,9 +1683,52 @@ exports.checkSubscriptionStatus = onCall<CheckSubscriptionStatusData, Promise<Ch
             const plan = SUBSCRIPTION_PLANS[newPlan];
             const planTokenCost = (newBillingPeriod === "monthly" ? plan.monthly : plan.yearly) * newDuration;
             
+            // Check user's current token balance
+            const currentBalance = userData?.tokenBalance || 0;
+            
+            if (currentBalance < planTokenCost) {
+              // Insufficient tokens - cancel downgrade and expire subscription
+              console.log(`User ${userId} has insufficient tokens for scheduled downgrade. Required: ${planTokenCost}, Available: ${currentBalance}`);
+              
+              await activeSubSnapshot.docs[0].ref.update({
+                scheduledDowngrade: admin.firestore.FieldValue.delete(),
+                status: "expired",
+                expiredAt: admin.firestore.FieldValue.serverTimestamp(),
+              });
+              
+              // Disable services
+              const embyService = userData?.services?.emby;
+              if (embyService?.linked && embyService?.serviceUserId) {
+                try {
+                  await disableEmbyAccount(embyService.serviceUserId);
+                } catch (error) {
+                  console.error("Failed to disable Emby account:", error);
+                }
+              }
+              
+              if (embyService?.serviceUserId) {
+                try {
+                  await updateJellyseerrRequestLimits(userData?.email || "", "basic", embyService.serviceUserId, { movieLimit: 0, tvLimit: 0 });
+                } catch (error) {
+                  console.error("Failed to disable Jellyseerr requests:", error);
+                }
+              }
+              
+              return { hasActiveSubscription: false };
+            }
+            
+            // User has enough tokens - process the downgrade
+            const batch = admin.firestore().batch();
+            
+            // Deduct tokens
+            const userRef = admin.firestore().doc(`users/${userId}`);
+            batch.update(userRef, {
+              tokenBalance: admin.firestore.FieldValue.increment(-planTokenCost)
+            });
+            
             // Create new subscription
             const newSubRef = admin.firestore().collection("subscriptions").doc();
-            await newSubRef.set({
+            batch.set(newSubRef, {
               subscriptionId: newSubRef.id,
               userId,
               planId: newPlan,
@@ -1704,12 +1747,28 @@ exports.checkSubscriptionStatus = onCall<CheckSubscriptionStatusData, Promise<Ch
               lastResetDate: admin.firestore.Timestamp.fromDate(newStartDate),
             });
             
+            // Create redemption log
+            const redemptionRef = admin.firestore().collection("redemptions").doc();
+            batch.set(redemptionRef, {
+              userId,
+              productType: "mediaSubscription",
+              productId: newPlan,
+              tokenCost: planTokenCost,
+              subscriptionId: newSubRef.id,
+              fromScheduledDowngrade: true,
+              previousPlanId: subData.planId,
+              createdAt: admin.firestore.FieldValue.serverTimestamp(),
+            });
+            
             // Mark old subscription as completed
-            await activeSubSnapshot.docs[0].ref.update({
+            batch.update(activeSubSnapshot.docs[0].ref, {
               status: "completed",
               completedAt: admin.firestore.FieldValue.serverTimestamp(),
               downgradedTo: newPlan,
             });
+            
+            // Commit all changes
+            await batch.commit();
             
             // Update services
             const embyService = userData?.services?.emby;

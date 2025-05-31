@@ -438,7 +438,7 @@ const MediaDashboard = () => {
                     onClick={async () => {
                       try {
                         const cancelDowngrade = httpsCallable(functions, "cancelScheduledDowngrade");
-                        await cancelDowngrade({ userId: user.uid });
+                        await cancelDowngrade({ userId: user!.uid });
                         await checkSubscriptionStatus();
                       } catch (err) {
                         setError("Failed to cancel downgrade");

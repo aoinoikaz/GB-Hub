@@ -1565,21 +1565,13 @@ exports.processSubscription = onCall<ProcessSubscriptionData, Promise<ProcessSub
 
       // Update services immediately if it's an upgrade or new subscription
       if (result.isImmediateUpgrade || (!hasActiveSubscription && !result.isDowngrade)) {
-        // Update Emby permissions
         if (result.embyUserId) {
           try {
             await updateEmbySubscriptionPermissions(result.embyUserId, planId);
-          } catch (error) {
-            console.error("Failed to update Emby permissions:", error);
-          }
-        }
-
-        // Update Jellyseerr request limits with Emby user ID
-        if (result.embyUserId) {
-          try {
+            await syncJellyseerrUsers();
             await updateJellyseerrRequestLimits(result.email, planId, result.embyUserId);
           } catch (error) {
-            console.error("Failed to update Jellyseerr limits:", error);
+            console.error("Failed to update services:", error);
           }
         }
       }

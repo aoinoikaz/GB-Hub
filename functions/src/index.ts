@@ -1596,7 +1596,6 @@ exports.processSubscription = onCall<ProcessSubscriptionData, Promise<ProcessSub
   }
 );
 
-// In checkSubscriptionStatus, the variables need to be declared in the right scope:
 
 exports.checkSubscriptionStatus = onCall<CheckSubscriptionStatusData, Promise<CheckSubscriptionStatusResponse>>(
   async (request) => {

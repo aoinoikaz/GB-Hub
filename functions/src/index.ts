@@ -453,7 +453,7 @@ class AccountServiceManager {
     }
 
     await userRef.set(userData, { merge: true });
-    
+
     const embyServiceUserId = userData.services?.emby?.serviceUserId;
     if (embyServiceUserId) {
       console.log(`Syncing new user ${username} to Jellyseerr`);

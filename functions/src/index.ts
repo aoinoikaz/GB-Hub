@@ -453,8 +453,12 @@ class AccountServiceManager {
     }
 
     await userRef.set(userData, { merge: true });
-    console.log(`Syncing new user ${username} to Jellyseerr`);
-    await syncJellyseerrUser(userData.services[serviceName].serviceUserId);
+    
+    const embyServiceUserId = userData.services?.emby?.serviceUserId;
+    if (embyServiceUserId) {
+      console.log(`Syncing new user ${username} to Jellyseerr`);
+      await syncJellyseerrUser(embyServiceUserId);
+    }
   }
 
   async syncPassword(username: string, newPassword: string): Promise<void> {
@@ -783,6 +787,7 @@ async function updateJellyseerrRequestLimits(
     console.error("Error updating Jellyseerr limits:", error);
   }
 }
+
 
 async function syncJellyseerrUser(embyUserId: string): Promise<boolean> {
   const secrets = await getSecretsConfig();

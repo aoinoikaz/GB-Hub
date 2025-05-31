@@ -453,6 +453,8 @@ class AccountServiceManager {
     }
 
     await userRef.set(userData, { merge: true });
+    console.log(`Syncing new user ${username} to Jellyseerr`);
+    await syncJellyseerrUsers();
   }
 
   async syncPassword(username: string, newPassword: string): Promise<void> {
@@ -660,6 +662,7 @@ async function updateEmbySubscriptionPermissions(embyUserId: string, planId: str
   console.log(`Successfully updated Emby permissions for user ${embyUserId} with plan ${planId}`);
 }
 
+
 async function updateJellyseerrRequestLimits(
   email: string, 
   planId: string, 
@@ -778,6 +781,33 @@ async function updateJellyseerrRequestLimits(
     
   } catch (error) {
     console.error("Error updating Jellyseerr limits:", error);
+  }
+}
+
+
+async function syncJellyseerrUsers(): Promise<boolean> {
+  const secrets = await getSecretsConfig();
+  
+  try {
+    const response = await fetch(`${JELLYSEERR_URL}/api/v1/settings/jellyfin/users`, {
+      method: 'POST',
+      headers: {
+        'X-Api-Key': secrets.JELLYSEERR_API_KEY,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({})
+    });
+    
+    if (!response.ok) {
+      console.error(`Jellyseerr sync failed: ${response.status}`);
+      return false;
+    }
+    
+    console.log('Jellyseerr user sync completed');
+    return true;
+  } catch (error) {
+    console.error('Error syncing Jellyseerr:', error);
+    return false;
   }
 }
 
@@ -1908,6 +1938,7 @@ exports.checkUsername = onCall<CheckUsernameData>(async (request) => {
     throw new HttpsError("internal", `Failed to check username availability: ${errorMessage}`);
   }
 });
+
 
 exports.setupUserAccount = onCall<SetupUserAccountData>(async (request) => {
   const { email, username, password } = request.data;

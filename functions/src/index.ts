@@ -1316,7 +1316,6 @@ exports.processTokenTrade = onCall<ProcessTokenTradeData, Promise<ProcessTokenTr
 );
 
 
-// Update the processSubscription function to pass embyUserId instead of username
 exports.processSubscription = onCall<ProcessSubscriptionData, Promise<ProcessSubscriptionResponse>>(
   async (request) => {
     const { userId, planId, billingPeriod, duration, isUpgrade, proRateCredit } = request.data;
@@ -1377,11 +1376,15 @@ exports.processSubscription = onCall<ProcessSubscriptionData, Promise<ProcessSub
         }
 
         let startDate = new Date();
+        let endDate: Date;
         let isImmediateUpgrade = false;
+        let isDowngrade = false;
+        let subscriptionId = "";
 
         if (hasActiveSubscription) {
           const activeSub = activeSubSnapshot.docs[0].data();
           const currentPlanId = activeSub.planId;
+          const activeEndDate = activeSub.endDate.toDate();
           
           // Determine if this is an upgrade or downgrade
           const currentPlanIndex = Object.keys(SUBSCRIPTION_PLANS).indexOf(currentPlanId);
@@ -1390,81 +1393,109 @@ exports.processSubscription = onCall<ProcessSubscriptionData, Promise<ProcessSub
           if (newPlanIndex > currentPlanIndex) {
             // This is an upgrade - apply immediately
             isImmediateUpgrade = true;
+            
+            // Calculate new end date from today
+            endDate = new Date(startDate);
+            if (billingPeriod === "monthly") {
+              endDate.setMonth(endDate.getMonth() + duration);
+            } else {
+              endDate.setFullYear(endDate.getFullYear() + duration);
+            }
+            
             // Cancel the current subscription
             transaction.update(activeSubSnapshot.docs[0].ref, {
               status: "upgraded",
               upgradedAt: admin.firestore.FieldValue.serverTimestamp(),
             });
           } else {
-            // This is a downgrade or same plan - schedule for later
-            const activeEndDate = activeSub.endDate.toDate();
-            if (activeEndDate > startDate) {
-              startDate = activeEndDate;
-            }
-            // Mark current subscription to not auto-renew
+            // This is a downgrade - schedule for later
+            isDowngrade = true;
+            startDate = activeEndDate; // Start when current plan ends
+            endDate = activeEndDate; // Keep the same end date for now
+            
+            // Mark current subscription to not auto-renew and schedule the downgrade
             transaction.update(activeSubSnapshot.docs[0].ref, {
               autoRenew: false,
-              nextPlanId: planId,
-              nextPlanBillingPeriod: billingPeriod,
+              scheduledDowngrade: {
+                planId: planId,
+                billingPeriod: billingPeriod,
+                duration: duration,
+                scheduledFor: admin.firestore.Timestamp.fromDate(activeEndDate),
+              }
             });
+          }
+        } else {
+          // New subscription - calculate end date normally
+          endDate = new Date(startDate);
+          if (billingPeriod === "monthly") {
+            endDate.setMonth(endDate.getMonth() + duration);
+          } else {
+            endDate.setFullYear(endDate.getFullYear() + duration);
           }
         }
 
-        // Calculate end date
-        const endDate = new Date(startDate);
-        if (billingPeriod === "monthly") {
-          endDate.setMonth(endDate.getMonth() + duration);
-        } else {
-          endDate.setFullYear(endDate.getFullYear() + duration);
+        // Only create a new subscription record if it's not a downgrade
+        if (!isDowngrade) {
+          // Create subscription record
+          const subscriptionRef = admin.firestore().collection("subscriptions").doc();
+          subscriptionId = subscriptionRef.id;
+
+          transaction.set(subscriptionRef, {
+            subscriptionId,
+            userId,
+            planId,
+            billingPeriod,
+            duration,
+            tokenCost: totalTokenCost,
+            startDate: admin.firestore.Timestamp.fromDate(startDate),
+            endDate: admin.firestore.Timestamp.fromDate(endDate),
+            status: "active",
+            autoRenew: false,
+            isUpgrade: isImmediateUpgrade,
+            createdAt: admin.firestore.FieldValue.serverTimestamp(),
+          });
         }
 
-        // Create subscription record
-        const subscriptionRef = admin.firestore().collection("subscriptions").doc();
-        const subscriptionId = subscriptionRef.id;
-
-        transaction.set(subscriptionRef, {
-          subscriptionId,
-          userId,
-          planId,
-          billingPeriod,
-          duration,
-          tokenCost: totalTokenCost,
-          startDate: admin.firestore.Timestamp.fromDate(startDate),
-          endDate: admin.firestore.Timestamp.fromDate(endDate),
-          status: "active",
-          autoRenew: false,
-          isUpgrade: isImmediateUpgrade,
-          createdAt: admin.firestore.FieldValue.serverTimestamp(),
-        });
-
-        // Deduct tokens
+        // Deduct tokens (even for downgrades, 0 tokens will be deducted)
         transaction.update(userRef, {
           tokenBalance: admin.firestore.FieldValue.increment(-totalTokenCost),
         });
 
         // Log redemption
         const redemptionRef = admin.firestore().collection("redemptions").doc();
-        transaction.set(redemptionRef, {
-          userId,
-          productType: "mediaSubscription",
-          productId: planId,
-          tokenCost: totalTokenCost,
-          subscriptionId,
-          isUpgrade: isImmediateUpgrade,
-          createdAt: admin.firestore.FieldValue.serverTimestamp(),
-        });
+        if (!isDowngrade) {
+          transaction.set(redemptionRef, {
+            userId,
+            productType: "mediaSubscription",
+            productId: planId,
+            tokenCost: totalTokenCost,
+            subscriptionId,
+            isUpgrade: isImmediateUpgrade,
+            createdAt: admin.firestore.FieldValue.serverTimestamp(),
+          });
+        } else {
+          transaction.set(redemptionRef, {
+            userId,
+            productType: "scheduledDowngrade",
+            productId: planId,
+            tokenCost: 0,
+            scheduledFor: admin.firestore.Timestamp.fromDate(startDate),
+            createdAt: admin.firestore.FieldValue.serverTimestamp(),
+          });
+        }
 
         return {
-          subscriptionId,
+          subscriptionId: subscriptionId || "scheduled",
           endDate: endDate.toISOString(),
           embyUserId: userData?.services?.emby?.serviceUserId || null,
           email: userData?.email || null,
           isImmediateUpgrade,
+          isDowngrade,
         };
       });
 
       // Update services immediately if it's an upgrade or new subscription
-      if (result.isImmediateUpgrade || !hasActiveSubscription) {
+      if (result.isImmediateUpgrade || (!hasActiveSubscription && !result.isDowngrade)) {
         // Update Emby permissions
         if (result.embyUserId) {
           try {

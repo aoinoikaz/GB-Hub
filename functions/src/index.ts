@@ -664,24 +664,34 @@ async function updateEmbySubscriptionPermissions(embyUserId: string, planId: str
   console.log(`Successfully updated Emby permissions for user ${embyUserId} with plan ${planId}`);
 }
 
-async function updateJellyseerrRequestLimits(email: string, planId: string, embyUserId?: string): Promise<void> {
+async function updateJellyseerrRequestLimits(
+  email: string, 
+  planId: string, 
+  embyUserId?: string,
+  customLimits?: { movieLimit: number; tvLimit: number }
+): Promise<void> {
   const secrets = await getSecretsConfig();
   const JELLYSEERR_API_KEY = secrets.JELLYSEERR_API_KEY;
   
-  // Map subscription plans to Jellyseerr request limits
-  const planLimits: { [key: string]: { movieLimit: number; tvLimit: number } } = {
-    standard: { movieLimit: 1, tvLimit: 1 },
-    duo: { movieLimit: 2, tvLimit: 1 },
-    family: { movieLimit: 4, tvLimit: 2 },
-    ultimate: { movieLimit: 10, tvLimit: 5 },
-  };
+  let limits: { movieLimit: number; tvLimit: number };
+  
+  if (customLimits) {
+    limits = customLimits;
+  } else {
+    const planLimits: { [key: string]: { movieLimit: number; tvLimit: number } } = {
+      standard: { movieLimit: 1, tvLimit: 1 },
+      duo: { movieLimit: 2, tvLimit: 1 },
+      family: { movieLimit: 4, tvLimit: 2 },
+      ultimate: { movieLimit: 10, tvLimit: 5 },
+    };
 
-  const limits = planLimits[planId];
-  if (!limits) {
-    throw new Error(`Unknown plan ID for Jellyseerr: ${planId}`);
+    limits = planLimits[planId];
+    if (!limits) {
+      console.log(`Unknown plan ${planId}, skipping Jellyseerr update`);
+      return;
+    }
   }
 
-  // Emby user ID is required since Jellyseerr uses it as jellyfinUserId
   if (!embyUserId) {
     console.log(`No Emby user ID provided for Jellyseerr update, skipping...`);
     return;
@@ -700,40 +710,60 @@ async function updateJellyseerrRequestLimits(email: string, planId: string, emby
     });
 
     if (!usersResponse.ok) {
-      console.error(`Failed to fetch Jellyseerr users: ${usersResponse.status} - ${await usersResponse.text()}`);
-      throw new Error(`Failed to fetch Jellyseerr users: ${usersResponse.status}`);
+      console.error(`Failed to fetch Jellyseerr users: ${usersResponse.status}`);
+      return;
     }
 
     const responseData = await usersResponse.json();
     const users = responseData.results || responseData;
-    console.log(`Found ${users.length} users in Jellyseerr`);
     
-    // Find user by jellyfinUserId (which is the Emby user ID)
     const jellyseerrUser = users.find((user: any) => 
       user.jellyfinUserId === embyUserId
     );
 
     if (!jellyseerrUser) {
-      console.log(`User with Emby ID ${embyUserId} not found in Jellyseerr. They need to login to Jellyseerr first.`);
+      console.log(`User with Emby ID ${embyUserId} not found in Jellyseerr. They need to login first.`);
       return;
     }
 
-    console.log(`Found Jellyseerr user: ID=${jellyseerrUser.id}, username=${jellyseerrUser.username || jellyseerrUser.displayName}, jellyfinUserId=${jellyseerrUser.jellyfinUserId}`);
+    // Get user's full details to preserve all fields
+    const userDetailsResponse = await fetch(`${JELLYSEERR_URL}/api/v1/user/${jellyseerrUser.id}`, {
+      method: 'GET',
+      headers: {
+        "X-Api-Key": JELLYSEERR_API_KEY,
+        "Accept": "application/json",
+      },
+    });
 
-    // Update the user's request limits
-    // Set quotaDays to null to disable Jellyseerr's auto-reset since we manage it
+    if (!userDetailsResponse.ok) {
+      console.error(`Failed to get user details: ${userDetailsResponse.status}`);
+      return;
+    }
+
+    const userDetails = await userDetailsResponse.json();
+
+    // MUST send FULL object (Fallenbagel's requirement)
     const updatePayload = {
-      permissions: jellyseerrUser.permissions || 2, // Preserve existing permissions
+      username: userDetails.username || null,
+      email: userDetails.email || userDetails.jellyfinUsername || email,
+      discordId: userDetails.settings?.discordId || "",
+      locale: userDetails.settings?.locale || "",
+      discoverRegion: userDetails.settings?.discoverRegion || "",
+      streamingRegion: userDetails.settings?.streamingRegion || "",
+      originalLanguage: userDetails.settings?.originalLanguage || null,
       movieQuotaLimit: limits.movieLimit,
-      movieQuotaDays: null, // Disable auto-reset
+      movieQuotaDays: limits.movieLimit > 0 ? 30 : 0,
       tvQuotaLimit: limits.tvLimit,
-      tvQuotaDays: null, // Disable auto-reset
+      tvQuotaDays: limits.tvLimit > 0 ? 30 : 0,
+      watchlistSyncMovies: userDetails.settings?.watchlistSyncMovies || null,
+      watchlistSyncTv: userDetails.settings?.watchlistSyncTv || null,
     };
 
-    console.log(`Updating Jellyseerr user with payload:`, JSON.stringify(updatePayload));
+    console.log(`Updating Jellyseerr with FULL payload`);
 
-    const updateResponse = await fetch(`${JELLYSEERR_URL}/api/v1/user/${jellyseerrUser.id}`, {
-      method: "PUT",
+    // CORRECT ENDPOINT: POST to /settings/main
+    const updateResponse = await fetch(`${JELLYSEERR_URL}/api/v1/user/${jellyseerrUser.id}/settings/main`, {
+      method: "POST",  // NOT PUT!
       headers: {
         "X-Api-Key": JELLYSEERR_API_KEY,
         "Content-Type": "application/json",
@@ -744,19 +774,16 @@ async function updateJellyseerrRequestLimits(email: string, planId: string, emby
 
     if (!updateResponse.ok) {
       const errorText = await updateResponse.text();
-      console.error(`Failed to update Jellyseerr user: ${updateResponse.status} - ${errorText}`);
+      console.error(`Failed to update Jellyseerr: ${updateResponse.status} - ${errorText}`);
       return;
     }
 
-    const updateResult = await updateResponse.json();
-    console.log(`Successfully updated Jellyseerr request limits for user ${jellyseerrUser.username || jellyseerrUser.displayName}:`, updateResult);
+    console.log(`Successfully updated Jellyseerr limits for user ${jellyseerrUser.id}`);
     
   } catch (error) {
     console.error("Error updating Jellyseerr limits:", error);
-    // Don't throw - Jellyseerr update failures shouldn't block subscription
   }
 }
-
 
 const accountServiceManager = new AccountServiceManager();
 

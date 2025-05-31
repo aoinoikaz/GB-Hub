@@ -1568,7 +1568,8 @@ exports.processSubscription = onCall<ProcessSubscriptionData, Promise<ProcessSub
   }
 );
 
-// Also update checkSubscriptionStatus to pass embyUserId when disabling
+// In checkSubscriptionStatus, the variables need to be declared in the right scope:
+
 exports.checkSubscriptionStatus = onCall<CheckSubscriptionStatusData, Promise<CheckSubscriptionStatusResponse>>(
   async (request) => {
     const { userId } = request.data;
@@ -1579,6 +1580,13 @@ exports.checkSubscriptionStatus = onCall<CheckSubscriptionStatusData, Promise<Ch
     }
 
     try {
+      // Get user data FIRST (move this up)
+      const userDoc = await admin.firestore().doc(`users/${userId}`).get();
+      if (!userDoc.exists) {
+        throw new HttpsError("not-found", "User not found in Firestore.");
+      }
+      const userData = userDoc.data();
+
       // Check for active subscriptions
       const activeSubQuery = admin
         .firestore()
@@ -1591,26 +1599,21 @@ exports.checkSubscriptionStatus = onCall<CheckSubscriptionStatusData, Promise<Ch
       const activeSubSnapshot = await activeSubQuery.get();
 
       if (activeSubSnapshot.empty) {
-        // Check if user has Emby account and disable it
-        const userDoc = await admin.firestore().doc(`users/${userId}`).get();
-        if (userDoc.exists) {
-          const userData = userDoc.data();
-          const embyService = userData?.services?.emby;
-          if (embyService?.linked && embyService?.serviceUserId) {
-            try {
-              await disableEmbyAccount(embyService.serviceUserId);
-            } catch (error) {
-              console.error("Failed to disable Emby account:", error);
-            }
+        // No active subscription - disable services
+        const embyService = userData?.services?.emby;
+        if (embyService?.linked && embyService?.serviceUserId) {
+          try {
+            await disableEmbyAccount(embyService.serviceUserId);
+          } catch (error) {
+            console.error("Failed to disable Emby account:", error);
           }
-          
-          // Also disable Jellyseerr requests using Emby user ID
-          if (embyService?.serviceUserId) {
-            try {
-              await updateJellyseerrRequestLimits(userData?.email || "", "basic", embyService.serviceUserId);
-            } catch (error) {
-              console.error("Failed to disable Jellyseerr requests:", error);
-            }
+        }
+        
+        if (embyService?.serviceUserId) {
+          try {
+            await updateJellyseerrRequestLimits(userData?.email || "", "basic", embyService.serviceUserId);
+          } catch (error) {
+            console.error("Failed to disable Jellyseerr requests:", error);
           }
         }
 
@@ -1625,144 +1628,149 @@ exports.checkSubscriptionStatus = onCall<CheckSubscriptionStatusData, Promise<Ch
         // Subscription has expired
         await activeSubSnapshot.docs[0].ref.update({ status: "expired" });
 
-        // Disable Emby account and Jellyseerr
-        const userDoc = await admin.firestore().doc(`users/${userId}`).get();
-        if (userDoc.exists) {
-          const userData = userDoc.data();
-          const embyService = userData?.services?.emby;
-          if (embyService?.linked && embyService?.serviceUserId) {
-            try {
-              await disableEmbyAccount(embyService.serviceUserId);
-            } catch (error) {
-              console.error("Failed to disable Emby account:", error);
-            }
+        // Disable services
+        const embyService = userData?.services?.emby;
+        if (embyService?.linked && embyService?.serviceUserId) {
+          try {
+            await disableEmbyAccount(embyService.serviceUserId);
+          } catch (error) {
+            console.error("Failed to disable Emby account:", error);
           }
-          
-          // Also disable Jellyseerr requests using Emby user ID
-          if (embyService?.serviceUserId) {
-            try {
-              await updateJellyseerrRequestLimits(userData?.email || "", "basic", embyService.serviceUserId);
-            } catch (error) {
-              console.error("Failed to disable Jellyseerr requests:", error);
-            }
+        }
+        
+        if (embyService?.serviceUserId) {
+          try {
+            await updateJellyseerrRequestLimits(userData?.email || "", "basic", embyService.serviceUserId);
+          } catch (error) {
+            console.error("Failed to disable Jellyseerr requests:", error);
           }
         }
 
         return { hasActiveSubscription: false };
       }
 
-      // In checkSubscriptionStatus, after checking if subscription expired but before returning active status:
+      const daysRemaining = Math.ceil((endDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+      
+      // Get these from subData
+      const movieRequestsUsed = subData.movieRequestsUsed || 0;
+      const tvRequestsUsed = subData.tvRequestsUsed || 0;
+      const lastResetDate = subData.lastResetDate?.toDate()?.toISOString() || subData.startDate.toDate().toISOString();
 
-const daysRemaining = Math.ceil((endDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+      // Check for scheduled downgrades that need processing
+      if (subData.scheduledDowngrade) {
+        const scheduledFor = subData.scheduledDowngrade.scheduledFor.toDate();
+        
+        if (now >= scheduledFor) {
+          console.log(`Processing scheduled downgrade for user ${userId}`);
+          
+          try {
+            // Create new subscription with downgraded plan
+            const newPlan = subData.scheduledDowngrade.planId;
+            const newBillingPeriod = subData.scheduledDowngrade.billingPeriod;
+            const newDuration = subData.scheduledDowngrade.duration;
+            
+            // Calculate new end date
+            const newStartDate = scheduledFor;
+            const newEndDate = new Date(newStartDate);
+            
+            if (newBillingPeriod === "monthly") {
+              newEndDate.setMonth(newEndDate.getMonth() + newDuration);
+            } else {
+              newEndDate.setFullYear(newEndDate.getFullYear() + newDuration);
+            }
+            
+            // Get plan token cost
+            const plan = SUBSCRIPTION_PLANS[newPlan];
+            const planTokenCost = (newBillingPeriod === "monthly" ? plan.monthly : plan.yearly) * newDuration;
+            
+            // Create new subscription
+            const newSubRef = admin.firestore().collection("subscriptions").doc();
+            await newSubRef.set({
+              subscriptionId: newSubRef.id,
+              userId,
+              planId: newPlan,
+              billingPeriod: newBillingPeriod,
+              duration: newDuration,
+              tokenCost: planTokenCost,
+              startDate: admin.firestore.Timestamp.fromDate(newStartDate),
+              endDate: admin.firestore.Timestamp.fromDate(newEndDate),
+              status: "active",
+              autoRenew: false,
+              fromDowngrade: true,
+              previousPlanId: subData.planId,
+              createdAt: admin.firestore.FieldValue.serverTimestamp(),
+              movieRequestsUsed: 0,
+              tvRequestsUsed: 0,
+              lastResetDate: admin.firestore.Timestamp.fromDate(newStartDate),
+            });
+            
+            // Mark old subscription as completed
+            await activeSubSnapshot.docs[0].ref.update({
+              status: "completed",
+              completedAt: admin.firestore.FieldValue.serverTimestamp(),
+              downgradedTo: newPlan,
+            });
+            
+            // Update services
+            const embyService = userData?.services?.emby;
+            if (embyService?.linked && embyService?.serviceUserId) {
+              await updateEmbySubscriptionPermissions(embyService.serviceUserId, newPlan);
+              await updateJellyseerrRequestLimits(userData?.email || "", newPlan, embyService.serviceUserId);
+            }
+            
+            // Return the new subscription info
+            return {
+              hasActiveSubscription: true,
+              subscription: {
+                subscriptionId: newSubRef.id,
+                planId: newPlan,
+                billingPeriod: newBillingPeriod,
+                startDate: newStartDate.toISOString(),
+                endDate: newEndDate.toISOString(),
+                status: "active",
+                autoRenew: false,
+                daysRemaining: Math.ceil((newEndDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24)),
+                movieRequestsUsed: 0,
+                tvRequestsUsed: 0,
+                lastResetDate: newStartDate.toISOString(),
+              },
+            };
+          } catch (error) {
+            console.error("Failed to process scheduled downgrade:", error);
+          }
+        }
+      }
 
-// Check for scheduled downgrades that need processing
-if (subData.scheduledDowngrade) {
-  const scheduledFor = subData.scheduledDowngrade.scheduledFor.toDate();
-  
-  if (now >= scheduledFor) {
-    console.log(`Processing scheduled downgrade for user ${userId}`);
-    
-    try {
-      // Create new subscription with downgraded plan
-      const newPlan = subData.scheduledDowngrade.planId;
-      const newBillingPeriod = subData.scheduledDowngrade.billingPeriod;
-      const newDuration = subData.scheduledDowngrade.duration;
-      
-      // Calculate new end date
-      const newStartDate = scheduledFor;
-      const newEndDate = new Date(newStartDate);
-      
-      if (newBillingPeriod === "monthly") {
-        newEndDate.setMonth(newEndDate.getMonth() + newDuration);
-      } else {
-        newEndDate.setFullYear(newEndDate.getFullYear() + newDuration);
-      }
-      
-      // Get plan token cost
-      const plan = SUBSCRIPTION_PLANS[newPlan];
-      const planTokenCost = (newBillingPeriod === "monthly" ? plan.monthly : plan.yearly) * newDuration;
-      
-      // Create new subscription
-      const newSubRef = admin.firestore().collection("subscriptions").doc();
-      await newSubRef.set({
-        subscriptionId: newSubRef.id,
-        userId,
-        planId: newPlan,
-        billingPeriod: newBillingPeriod,
-        duration: newDuration,
-        tokenCost: planTokenCost,
-        startDate: admin.firestore.Timestamp.fromDate(newStartDate),
-        endDate: admin.firestore.Timestamp.fromDate(newEndDate),
-        status: "active",
-        autoRenew: false,
-        fromDowngrade: true,
-        previousPlanId: subData.planId,
-        createdAt: admin.firestore.FieldValue.serverTimestamp(),
-        movieRequestsUsed: 0,
-        tvRequestsUsed: 0,
-        lastResetDate: admin.firestore.Timestamp.fromDate(newStartDate),
-      });
-      
-      // Mark old subscription as completed
-      await activeSubSnapshot.docs[0].ref.update({
-        status: "completed",
-        completedAt: admin.firestore.FieldValue.serverTimestamp(),
-        downgradedTo: newPlan,
-      });
-      
-      // Update services
-      const embyService = userData?.services?.emby;
-      if (embyService?.linked && embyService?.serviceUserId) {
-        await updateEmbySubscriptionPermissions(embyService.serviceUserId, newPlan);
-        await updateJellyseerrRequestLimits(userData?.email || "", newPlan, embyService.serviceUserId);
-      }
-      
-      // Return the new subscription info
+      // Return with scheduled downgrade info
       return {
         hasActiveSubscription: true,
         subscription: {
-          subscriptionId: newSubRef.id,
-          planId: newPlan,
-          billingPeriod: newBillingPeriod,
-          startDate: newStartDate.toISOString(),
-          endDate: newEndDate.toISOString(),
-          status: "active",
-          autoRenew: false,
-          daysRemaining: Math.ceil((newEndDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24)),
-          movieRequestsUsed: 0,
-          tvRequestsUsed: 0,
-          lastResetDate: newStartDate.toISOString(),
+          subscriptionId: subData.subscriptionId,
+          planId: subData.planId,
+          billingPeriod: subData.billingPeriod,
+          startDate: subData.startDate.toDate().toISOString(),
+          endDate: endDate.toISOString(),
+          status: subData.status,
+          autoRenew: subData.autoRenew || false,
+          daysRemaining,
+          movieRequestsUsed,
+          tvRequestsUsed,
+          lastResetDate,
+          // Add scheduled downgrade info
+          scheduledDowngrade: subData.scheduledDowngrade ? {
+            planId: subData.scheduledDowngrade.planId,
+            billingPeriod: subData.scheduledDowngrade.billingPeriod,
+            scheduledFor: subData.scheduledDowngrade.scheduledFor.toDate().toISOString(),
+          } : null,
         },
       };
-    } catch (error) {
-      console.error("Failed to process scheduled downgrade:", error);
+    } catch (error: unknown) {
+      console.error("Error in checkSubscriptionStatus:", error);
+      const errorMessage = error instanceof Error ? error.message : "Unknown error";
+      throw new HttpsError("internal", `Failed to check subscription status: ${errorMessage}`);
     }
   }
-}
-
-// Return with scheduled downgrade info
-return {
-  hasActiveSubscription: true,
-  subscription: {
-    subscriptionId: subData.subscriptionId,
-    planId: subData.planId,
-    billingPeriod: subData.billingPeriod,
-    startDate: subData.startDate.toDate().toISOString(),
-    endDate: endDate.toISOString(),
-    status: subData.status,
-    autoRenew: subData.autoRenew || false,
-    daysRemaining,
-    movieRequestsUsed,
-    tvRequestsUsed,
-    lastResetDate,
-    // Add scheduled downgrade info
-    scheduledDowngrade: subData.scheduledDowngrade ? {
-      planId: subData.scheduledDowngrade.planId,
-      billingPeriod: subData.scheduledDowngrade.billingPeriod,
-      scheduledFor: subData.scheduledDowngrade.scheduledFor.toDate().toISOString(),
-    } : null,
-  },
-};
+);
 
 exports.cancelScheduledDowngrade = onCall(async (request) => {
   const { userId } = request.data;

@@ -171,7 +171,6 @@ const MediaDashboard = () => {
   const [loading, setLoading] = useState(true);
   const [selectedPlan, setSelectedPlan] = useState<string | null>(null);
   const [billingPeriod, setBillingPeriod] = useState<"monthly" | "yearly">("monthly");
-  const [duration, setDuration] = useState<number>(1);
   const [redeeming, setRedeeming] = useState(false);
   const [showBoosterPacks, setShowBoosterPacks] = useState(false);
   const [purchasingBooster, setPurchasingBooster] = useState<string | null>(null);
@@ -240,14 +239,14 @@ const MediaDashboard = () => {
     fetchUserData();
   }, [user, authLoading]);
   
+
   const calculateTokenCost = () => {
-    if (!selectedPlan) return 0;
+  if (!selectedPlan) return 0;
     const plan = subscriptionPlans.find((p) => p.id === selectedPlan);
     if (!plan) return 0;
     
     const baseTokens = billingPeriod === "monthly" ? plan.monthlyTokens : plan.yearlyTokens;
-    const multiplier = billingPeriod === "monthly" ? duration : duration;
-    return baseTokens * multiplier;
+    return baseTokens;
   };
 
   const calculateProrate = () => {
@@ -307,7 +306,7 @@ const MediaDashboard = () => {
         userId: user.uid,
         planId: selectedPlan,
         billingPeriod,
-        duration,
+        duration: 1,
         isUpgrade: currentPlan && selectedPlan !== currentPlan,
         proRateCredit: currentPlan && selectedPlan !== currentPlan ? proRateCredit : 0,
       });
@@ -323,7 +322,6 @@ const MediaDashboard = () => {
         await checkSubscriptionStatus();
         
         setSelectedPlan(null);
-        setDuration(1);
       }
       
     } catch (err: any) {
@@ -678,49 +676,21 @@ const MediaDashboard = () => {
             <div className="mb-6 p-4 bg-gray-800 rounded-lg">
               <h3 className="text-xl font-semibold mb-4">Complete Your Subscription</h3>
               
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-                <div>
-                  <label className="block mb-2 text-gray-300">Duration</label>
-                  <select
-                    value={duration}
-                    onChange={(e) => setDuration(parseInt(e.target.value))}
-                    className="w-full px-4 py-2 border rounded-md bg-gray-700 border-gray-600 text-white focus:ring-2 focus:ring-purple-500 focus:outline-none"
-                  >
-                    {billingPeriod === "monthly" ? (
-                      <>
-                        <option value={1}>1 month</option>
-                        <option value={3}>3 months</option>
-                        <option value={6}>6 months</option>
-                        <option value={12}>12 months</option>
-                      </>
-                    ) : (
-                      <>
-                        <option value={1}>1 year</option>
-                        <option value={2}>2 years</option>
-                        <option value={3}>3 years</option>
-                      </>
-                    )}
-                  </select>
-                </div>
-                
-                <div className="flex items-end">
-                  <div className="w-full">
-                    <p className="text-gray-300 mb-2">Total Cost</p>
-                    <p className="text-2xl font-bold text-yellow-400">
-                      {finalCost} tokens
-                      {proRateCredit > 0 && currentPlan && selectedPlan !== currentPlan && (
-                        <span className="text-sm text-green-400 ml-2">
-                          (Pro-rate credit: {proRateCredit} tokens)
-                        </span>
-                      )}
-                    </p>
-                    {tokenBalance < finalCost && (
-                      <p className="text-red-400 text-sm mt-1">
-                        You need {finalCost - tokenBalance} more tokens
-                      </p>
-                    )}
-                  </div>
-                </div>
+              <div className="mb-4">
+                <p className="text-gray-300 mb-2">Total Cost</p>
+                <p className="text-2xl font-bold text-yellow-400">
+                  {finalCost} tokens
+                  {proRateCredit > 0 && currentPlan && selectedPlan !== currentPlan && (
+                    <span className="text-sm text-green-400 ml-2">
+                      (Pro-rate credit: {proRateCredit} tokens)
+                    </span>
+                  )}
+                </p>
+                {tokenBalance < finalCost && (
+                  <p className="text-red-400 text-sm mt-1">
+                    You need {finalCost - tokenBalance} more tokens
+                  </p>
+                )}
               </div>
               
               {/* Show pro-rate info for plan changes */}

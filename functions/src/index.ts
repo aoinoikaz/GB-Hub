@@ -41,7 +41,6 @@ const JELLYSEERR_URL = "https://request-media.gondolabros.com"
 const BUCKET = admin.storage().bucket();
 
 const SUBSCRIPTION_PLANS: { [key: string]: SubscriptionPlan } = {
-  basic: { monthly: 40, yearly: 400 },
   standard: { monthly: 60, yearly: 600 },
   duo: { monthly: 80, yearly: 800 },
   family: { monthly: 120, yearly: 1200 },
@@ -671,11 +670,10 @@ async function updateJellyseerrRequestLimits(email: string, planId: string, emby
   
   // Map subscription plans to Jellyseerr request limits
   const planLimits: { [key: string]: { movieLimit: number; tvLimit: number } } = {
-    basic: { movieLimit: 0, tvLimit: 0 },
-    standard: { movieLimit: 1, tvLimit: 0 },
+    standard: { movieLimit: 1, tvLimit: 1 },
     duo: { movieLimit: 2, tvLimit: 1 },
     family: { movieLimit: 4, tvLimit: 2 },
-    ultimate: { movieLimit: 10, tvLimit: 4 },
+    ultimate: { movieLimit: 10, tvLimit: 5 },
   };
 
   const limits = planLimits[planId];

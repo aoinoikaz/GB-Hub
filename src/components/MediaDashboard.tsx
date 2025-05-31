@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { doc, getDoc } from "firebase/firestore";
 import { db } from "../config/firebase";
 import { useAuth } from "../context/auth-context";
-import { Info, Spinner, Monitor, Download, FilmSlate, Television, Users, Crown, Star, Check, X, Rocket, Lightning } from "phosphor-react";
+import { Info, Spinner, Download, FilmSlate, Television, Users, Crown, Star, Check, X, Rocket, Lightning } from "phosphor-react";
 import { getFunctions, httpsCallable } from "firebase/functions";
 import { useNavigate } from "react-router-dom";
 
@@ -51,21 +51,6 @@ interface SubscriptionPlan {
 
 const subscriptionPlans: SubscriptionPlan[] = [
   {
-    id: "basic",
-    name: "Basic",
-    monthlyTokens: 40,
-    yearlyTokens: 400,
-    features: {
-      streams: 1,
-      downloads: false,
-      movieRequests: 0,
-      tvRequests: 0,
-      support: "standard",
-    },
-    icon: <Monitor size={24} />,
-    color: "blue",
-  },
-  {
     id: "standard",
     name: "Standard",
     monthlyTokens: 60,
@@ -74,7 +59,7 @@ const subscriptionPlans: SubscriptionPlan[] = [
       streams: 1,
       downloads: true,
       movieRequests: 1,
-      tvRequests: 0,
+      tvRequests: 1,
       support: "standard",
     },
     icon: <Download size={24} />,
@@ -120,14 +105,13 @@ const subscriptionPlans: SubscriptionPlan[] = [
       streams: 10,  // Changed from "unlimited" to 10
       downloads: true,
       movieRequests: 10,
-      tvRequests: 4,
+      tvRequests: 5,
       support: "priority",
     },
     icon: <Crown size={24} />,
     color: "yellow",
   },
 ];
-
 
 const boosterPacks = [
   {

@@ -418,11 +418,38 @@ const MediaDashboard = () => {
                 <strong>Current Plan:</strong> {subscriptionPlans.find(p => p.id === currentPlan)?.name || currentPlan}
               </p>
             )}
+
+
             {activeSubscription && (
-              <>
-                <p className="text-sm text-gray-400 mt-2">
-                  {activeSubscription.daysRemaining} days remaining • Expires {new Date(activeSubscription.endDate).toLocaleDateString()}
-                </p>
+            <>
+              <p className="text-sm text-gray-400 mt-2">
+                {activeSubscription.daysRemaining} days remaining • Expires {new Date(activeSubscription.endDate).toLocaleDateString()}
+              </p>
+              
+              {/* Show scheduled downgrade info */}
+              {activeSubscription.scheduledDowngrade && (
+                <div className="mt-3 p-3 bg-yellow-900/20 border border-yellow-600/30 rounded-md">
+                  <p className="text-sm text-yellow-400">
+                    <Lightning size={16} className="inline mr-1" />
+                    Scheduled downgrade to {subscriptionPlans.find(p => p.id === activeSubscription.scheduledDowngrade?.planId)?.name} plan
+                    on {new Date(activeSubscription.scheduledDowngrade.scheduledFor).toLocaleDateString()}
+                  </p>
+                  <button
+                    onClick={async () => {
+                      try {
+                        const cancelDowngrade = httpsCallable(functions, "cancelScheduledDowngrade");
+                        await cancelDowngrade({ userId: user.uid });
+                        await checkSubscriptionStatus();
+                      } catch (err) {
+                        setError("Failed to cancel downgrade");
+                      }
+                    }}
+                    className="text-xs text-yellow-300 hover:text-yellow-200 underline mt-1"
+                  >
+                    Cancel downgrade
+                  </button>
+                </div>
+              )}
                 {/* Request Usage */}
                 {currentPlan && currentPlan !== "basic" && (
                   <div className="mt-3 flex gap-4">

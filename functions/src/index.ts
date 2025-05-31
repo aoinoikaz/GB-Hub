@@ -1315,7 +1315,6 @@ exports.processTokenTrade = onCall<ProcessTokenTradeData, Promise<ProcessTokenTr
   }
 );
 
-
 exports.processSubscription = onCall<ProcessSubscriptionData, Promise<ProcessSubscriptionResponse>>(
   async (request) => {
     const { userId, planId, billingPeriod, duration, isUpgrade, proRateCredit } = request.data;
@@ -1366,15 +1365,6 @@ exports.processSubscription = onCall<ProcessSubscriptionData, Promise<ProcessSub
         const userData = userDoc.data();
         const currentBalance = userData?.tokenBalance || 0;
 
-        // Apply pro-rate credit if this is an upgrade
-        if (isUpgrade && proRateCredit && proRateCredit > 0) {
-          totalTokenCost = Math.max(0, totalTokenCost - proRateCredit);
-        }
-
-        if (currentBalance < totalTokenCost) {
-          throw new HttpsError("failed-precondition", "Insufficient tokens.");
-        }
-
         let startDate = new Date();
         let endDate: Date;
         let isImmediateUpgrade = false;
@@ -1386,13 +1376,37 @@ exports.processSubscription = onCall<ProcessSubscriptionData, Promise<ProcessSub
           const currentPlanId = activeSub.planId;
           const activeEndDate = activeSub.endDate.toDate();
           
+          // Check for scheduled downgrade spam
+          if (activeSub.scheduledDowngrade && activeSub.scheduledDowngrade.planId === planId) {
+            const currentPlanIndex = Object.keys(SUBSCRIPTION_PLANS).indexOf(currentPlanId);
+            const newPlanIndex = Object.keys(SUBSCRIPTION_PLANS).indexOf(planId);
+            
+            if (newPlanIndex < currentPlanIndex) {
+              // Trying to schedule same downgrade again
+              throw new HttpsError(
+                "already-exists", 
+                `Downgrade to ${planId} plan is already scheduled for ${activeSub.scheduledDowngrade.scheduledFor.toDate().toLocaleDateString()}.`
+              );
+            }
+          }
+          
           // Determine if this is an upgrade or downgrade
           const currentPlanIndex = Object.keys(SUBSCRIPTION_PLANS).indexOf(currentPlanId);
           const newPlanIndex = Object.keys(SUBSCRIPTION_PLANS).indexOf(planId);
           
           if (newPlanIndex > currentPlanIndex) {
-            // This is an upgrade - apply immediately
+            // UPGRADE - apply immediately
             isImmediateUpgrade = true;
+            
+            // Apply pro-rate credit
+            if (proRateCredit && proRateCredit > 0) {
+              totalTokenCost = Math.max(0, totalTokenCost - proRateCredit);
+            }
+            
+            // Clear any scheduled downgrade
+            if (activeSub.scheduledDowngrade) {
+              console.log("Clearing scheduled downgrade due to upgrade");
+            }
             
             // Calculate new end date from today
             endDate = new Date(startDate);
@@ -1406,32 +1420,50 @@ exports.processSubscription = onCall<ProcessSubscriptionData, Promise<ProcessSub
             transaction.update(activeSubSnapshot.docs[0].ref, {
               status: "upgraded",
               upgradedAt: admin.firestore.FieldValue.serverTimestamp(),
+              scheduledDowngrade: admin.firestore.FieldValue.delete(), // Remove any scheduled downgrade
             });
-          } else {
-            // This is a downgrade - schedule for later
+            
+          } else if (newPlanIndex < currentPlanIndex) {
+            // DOWNGRADE - schedule for later
             isDowngrade = true;
+            totalTokenCost = 0; // No charge for downgrades
             startDate = activeEndDate; // Start when current plan ends
             endDate = activeEndDate; // Keep the same end date for now
             
-            // Mark current subscription to not auto-renew and schedule the downgrade
+            // Update or create scheduled downgrade
+            const scheduledDowngradeData = {
+              planId: planId,
+              billingPeriod: billingPeriod,
+              duration: duration,
+              scheduledFor: admin.firestore.Timestamp.fromDate(activeEndDate),
+            };
+            
+            // Mark current subscription with scheduled downgrade
             transaction.update(activeSubSnapshot.docs[0].ref, {
               autoRenew: false,
-              scheduledDowngrade: {
-                planId: planId,
-                billingPeriod: billingPeriod,
-                duration: duration,
-                scheduledFor: admin.firestore.Timestamp.fromDate(activeEndDate),
-              }
+              scheduledDowngrade: scheduledDowngradeData,
             });
+            
+          } else {
+            // SAME PLAN - treat as renewal
+            throw new HttpsError(
+              "failed-precondition", 
+              "You already have an active " + planId + " subscription."
+            );
           }
         } else {
-          // New subscription - calculate end date normally
+          // NEW SUBSCRIPTION - calculate end date normally
           endDate = new Date(startDate);
           if (billingPeriod === "monthly") {
             endDate.setMonth(endDate.getMonth() + duration);
           } else {
             endDate.setFullYear(endDate.getFullYear() + duration);
           }
+        }
+
+        // Check balance
+        if (currentBalance < totalTokenCost) {
+          throw new HttpsError("failed-precondition", "Insufficient tokens.");
         }
 
         // Only create a new subscription record if it's not a downgrade
@@ -1453,13 +1485,19 @@ exports.processSubscription = onCall<ProcessSubscriptionData, Promise<ProcessSub
             autoRenew: false,
             isUpgrade: isImmediateUpgrade,
             createdAt: admin.firestore.FieldValue.serverTimestamp(),
+            // Initialize request tracking
+            movieRequestsUsed: 0,
+            tvRequestsUsed: 0,
+            lastResetDate: admin.firestore.Timestamp.fromDate(startDate),
           });
         }
 
-        // Deduct tokens (even for downgrades, 0 tokens will be deducted)
-        transaction.update(userRef, {
-          tokenBalance: admin.firestore.FieldValue.increment(-totalTokenCost),
-        });
+        // Deduct tokens
+        if (totalTokenCost > 0) {
+          transaction.update(userRef, {
+            tokenBalance: admin.firestore.FieldValue.increment(-totalTokenCost),
+          });
+        }
 
         // Log redemption
         const redemptionRef = admin.firestore().collection("redemptions").doc();
@@ -1471,6 +1509,7 @@ exports.processSubscription = onCall<ProcessSubscriptionData, Promise<ProcessSub
             tokenCost: totalTokenCost,
             subscriptionId,
             isUpgrade: isImmediateUpgrade,
+            proRateCredit: isImmediateUpgrade ? proRateCredit : 0,
             createdAt: admin.firestore.FieldValue.serverTimestamp(),
           });
         } else {
@@ -1522,6 +1561,7 @@ exports.processSubscription = onCall<ProcessSubscriptionData, Promise<ProcessSub
       };
     } catch (error: unknown) {
       console.error("Error in processSubscription:", error);
+      if (error instanceof HttpsError) throw error;
       const errorMessage = error instanceof Error ? error.message : "Unknown error";
       throw new HttpsError("internal", `Failed to process subscription: ${errorMessage}`);
     }

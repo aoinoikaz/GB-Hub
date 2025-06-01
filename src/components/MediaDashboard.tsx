@@ -1,10 +1,15 @@
-// src/components/MediaDashboard.tsx - Complete updated component
+// src/components/MediaDashboard.tsx - Complete Fixed Version
 
 import { useState, useEffect } from "react";
 import { doc, getDoc } from "firebase/firestore";
 import { db } from "../config/firebase";
 import { useAuth } from "../context/auth-context";
-import { Info, Spinner, Download, FilmSlate, Television, Users, Crown, Star, Check, X, Rocket, Lightning, Warning } from "phosphor-react";
+import { 
+  Info, Spinner, FilmSlate, Television, Users, Crown,
+  Check, X, Rocket, Lightning, Warning, CheckCircle, Clock, 
+  CreditCard, ArrowRight, Sparkle, Gift,
+  VideoCamera, Headphones, Monitor, CloudArrowDown, Coins
+} from "phosphor-react";
 import { getFunctions, httpsCallable } from "firebase/functions";
 import { useNavigate } from "react-router-dom";
 
@@ -47,6 +52,7 @@ interface SubscriptionPlan {
   popular?: boolean;
   icon: React.ReactNode;
   color: string;
+  gradient: string;
 }
 
 const subscriptionPlans: SubscriptionPlan[] = [
@@ -62,8 +68,9 @@ const subscriptionPlans: SubscriptionPlan[] = [
       tvRequests: 1,
       support: "standard",
     },
-    icon: <Download size={24} />,
-    color: "green",
+    icon: <VideoCamera size={24} />,
+    color: "emerald",
+    gradient: "from-emerald-500 to-green-500",
   },
   {
     id: "duo",
@@ -78,7 +85,8 @@ const subscriptionPlans: SubscriptionPlan[] = [
       support: "standard",
     },
     icon: <Users size={24} />,
-    color: "purple",
+    color: "blue",
+    gradient: "from-blue-500 to-purple-500",
     popular: true,
   },
   {
@@ -94,7 +102,8 @@ const subscriptionPlans: SubscriptionPlan[] = [
       support: "standard",
     },
     icon: <Users size={24} />,
-    color: "pink",
+    color: "purple",
+    gradient: "from-purple-500 to-pink-500",
   },
   {
     id: "ultimate",
@@ -110,48 +119,49 @@ const subscriptionPlans: SubscriptionPlan[] = [
     },
     icon: <Crown size={24} />,
     color: "yellow",
+    gradient: "from-yellow-500 to-orange-500",
   },
 ];
 
 const boosterPacks = [
   {
     id: "movie-booster-5",
-    name: "Movie Pack +5",
+    name: "Movie Pack",
     tokens: 50,
-    description: "Add 5 movie requests this month",
+    description: "+5 movie requests",
     icon: <FilmSlate size={20} />,
-    color: "orange",
+    gradient: "from-orange-500 to-red-500",
     type: "movie",
     amount: 5,
   },
   {
     id: "tv-booster-3",
-    name: "TV Pack +3",
+    name: "TV Pack",
     tokens: 60,
-    description: "Add 3 TV show requests this month",
+    description: "+3 TV show requests",
     icon: <Television size={20} />,
-    color: "teal",
+    gradient: "from-teal-500 to-cyan-500",
     type: "tv",
     amount: 3,
   },
   {
     id: "mega-booster",
-    name: "Mega Booster",
+    name: "Mega Bundle",
     tokens: 150,
-    description: "+10 movies & +5 TV shows this month",
+    description: "+10 movies & +5 TV shows",
     icon: <Rocket size={20} />,
-    color: "purple",
+    gradient: "from-purple-500 to-pink-500",
     type: "both",
     movieAmount: 10,
     tvAmount: 5,
   },
   {
     id: "ultra-booster",
-    name: "Ultra Pack",
+    name: "Ultra Bundle",
     tokens: 300,
-    description: "+20 movies & +10 TV shows this month",
+    description: "+20 movies & +10 TV shows",
     icon: <Lightning size={20} />,
-    color: "yellow",
+    gradient: "from-yellow-500 to-red-500",
     type: "mega",
     movieAmount: 20,
     tvAmount: 10,
@@ -215,7 +225,6 @@ const MediaDashboard = () => {
       });
 
       if (result.data) {
-        // Refresh subscription status
         await checkSubscriptionStatus();
       }
     } catch (err: any) {
@@ -252,7 +261,7 @@ const MediaDashboard = () => {
           setUsername(user.displayName || "Not set");
         }
       } catch (err) {
-        console.error("🔥 Error fetching Firestore data:", err);
+        console.error("Error fetching Firestore data:", err);
         setError("Failed to fetch account data.");
       } finally {
         setLoading(false);
@@ -266,9 +275,7 @@ const MediaDashboard = () => {
     if (!selectedPlan) return 0;
     const plan = subscriptionPlans.find((p) => p.id === selectedPlan);
     if (!plan) return 0;
-    
-    const baseTokens = billingPeriod === "monthly" ? plan.monthlyTokens : plan.yearlyTokens;
-    return baseTokens;
+    return billingPeriod === "monthly" ? plan.monthlyTokens : plan.yearlyTokens;
   };
 
   const calculateProrate = () => {
@@ -279,14 +286,12 @@ const MediaDashboard = () => {
     
     if (!currentPlanData || !newPlanData) return 0;
     
-    // Calculate remaining days
     const endDate = new Date(activeSubscription.endDate);
     const now = new Date();
     const totalDays = Math.ceil((endDate.getTime() - new Date(activeSubscription.startDate).getTime()) / (1000 * 60 * 60 * 24));
     const remainingDays = Math.ceil((endDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
     const usedDays = totalDays - remainingDays;
     
-    // Calculate prorated amount
     const currentPlanTokens = activeSubscription.billingPeriod === "monthly" ? currentPlanData.monthlyTokens : currentPlanData.yearlyTokens;
     const usedTokens = Math.floor((currentPlanTokens * usedDays) / totalDays);
     const unusedTokens = currentPlanTokens - usedTokens;
@@ -304,13 +309,11 @@ const MediaDashboard = () => {
       let tokenCost = calculateTokenCost();
       const proRateCredit = calculateProrate();
       
-      // Apply pro-rate credit for upgrades
       if (currentPlan && selectedPlan !== currentPlan && proRateCredit > 0) {
         const currentPlanIndex = subscriptionPlans.findIndex(p => p.id === currentPlan);
         const newPlanIndex = subscriptionPlans.findIndex(p => p.id === selectedPlan);
         
         if (newPlanIndex > currentPlanIndex) {
-          // Upgrade - apply credit
           tokenCost = Math.max(0, tokenCost - proRateCredit);
         }
       }
@@ -341,9 +344,8 @@ const MediaDashboard = () => {
         }
 
         await checkSubscriptionStatus();
-        
         setSelectedPlan(null);
-        setAutoRenewEnabled(true); // Reset for next time
+        setAutoRenewEnabled(true);
       }
       
     } catch (err: any) {
@@ -375,7 +377,6 @@ const MediaDashboard = () => {
       });
 
       if (result.data) {
-        // Refresh user data
         const userRef = doc(db, `users/${user.uid}`);
         const userSnap = await getDoc(userRef);
         if (userSnap.exists()) {
@@ -383,7 +384,6 @@ const MediaDashboard = () => {
           setTokenBalance(data.tokenBalance || 0);
         }
 
-        // Refresh subscription status
         await checkSubscriptionStatus();
       }
     } catch (err: any) {
@@ -396,13 +396,10 @@ const MediaDashboard = () => {
 
   if (loading || authLoading) {
     return (
-      <div className="p-6 bg-gray-900 text-white rounded-lg text-center">
-        <div className="text-left mb-6">
-          <h1 className="text-3xl font-bold">Media Dashboard</h1>
-          <p className="text-gray-400">Manage your media account preferences</p>
-        </div>
-        <div className="flex justify-center">
-          <Spinner size={32} className="animate-spin text-white" />
+      <div className="min-h-screen bg-gradient-to-br from-gray-900 via-purple-900/20 to-gray-900 flex items-center justify-center">
+        <div className="text-center">
+          <Spinner size={48} className="animate-spin text-purple-400 mx-auto mb-4" />
+          <p className="text-gray-400">Loading your media experience...</p>
         </div>
       </div>
     );
@@ -417,452 +414,595 @@ const MediaDashboard = () => {
   const isCancelled = activeSubscription && !activeSubscription.autoRenew;
 
   return (
-    <div className="p-6 bg-gray-900 text-white rounded-lg">
-      <div className="mb-6">
-        <h1 className="text-3xl font-bold">Media Dashboard</h1>
-        <p className="text-gray-400">Manage your media account and subscription</p>
+    <div className="min-h-screen bg-gradient-to-br from-gray-900 via-purple-900/10 to-gray-900">
+      {/* Animated background elements */}
+      <div className="fixed inset-0 overflow-hidden pointer-events-none">
+        <div className="absolute -top-40 -right-40 w-80 h-80 bg-purple-500 rounded-full mix-blend-multiply filter blur-3xl opacity-20 animate-blob"></div>
+        <div className="absolute -bottom-40 -left-40 w-80 h-80 bg-pink-500 rounded-full mix-blend-multiply filter blur-3xl opacity-20 animate-blob animation-delay-2000"></div>
+        <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-80 h-80 bg-blue-500 rounded-full mix-blend-multiply filter blur-3xl opacity-20 animate-blob animation-delay-4000"></div>
       </div>
 
-      {error && <p className="text-red-500 text-sm mb-4">{error}</p>}
-
-      {/* Account Status */}
-      <div className="mb-6 p-4 bg-gray-800 rounded-lg">
-        <div className="flex justify-between items-center">
-          <div>
-            <p className="text-lg font-semibold">
-              <strong>Username:</strong> {username}
-            </p>
-            <p className="text-lg font-semibold">
-              <strong>Status:</strong> {
-                isCancelled ? (
-                  <span className="text-yellow-400">Subscription Cancelled</span>
-                ) : activeSubscription ? (
-                  <span className="text-green-400">Active</span>
-                ) : (
-                  <span className="text-gray-400">Inactive</span>
-                )
-              }
-            </p>
-            {currentPlan && (
-              <p className="text-lg font-semibold">
-                <strong>Current Plan:</strong> {subscriptionPlans.find(p => p.id === currentPlan)?.name || currentPlan}
-                {isCancelled && <span className="text-yellow-400 text-sm ml-2">(Ending {new Date(activeSubscription.endDate).toLocaleDateString()})</span>}
-              </p>
-            )}
-
-            {activeSubscription && (
-              <>
-                <p className="text-sm text-gray-400 mt-2">
-                  {activeSubscription.daysRemaining} days remaining • {isCancelled ? "Access ends" : "Expires"} {new Date(activeSubscription.endDate).toLocaleDateString()}
-                </p>
-                
-                {/* Auto-Renew / Cancel Section */}
-                <div className="mt-3 p-3 bg-gray-700 rounded-md">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="font-medium text-white flex items-center gap-2">
-                        {activeSubscription.autoRenew ? (
-                          <>
-                            <Check size={16} className="text-green-400" />
-                            Auto-Renewal Active
-                          </>
-                        ) : (
-                          <>
-                            <X size={16} className="text-yellow-400" />
-                            Subscription Ending
-                          </>
-                        )}
-                      </p>
-                      <p className="text-sm text-gray-400">
-                        {activeSubscription.autoRenew 
-                          ? `Renews on ${new Date(activeSubscription.endDate).toLocaleDateString()}`
-                          : `Access until ${new Date(activeSubscription.endDate).toLocaleDateString()}`
-                        }
-                      </p>
-                    </div>
-                    <button
-                      onClick={handleToggleAutoRenew}
-                      disabled={togglingAutoRenew}
-                      className={`px-3 py-1.5 rounded-md text-sm font-medium transition ${
-                        activeSubscription.autoRenew
-                          ? "bg-red-600/20 text-red-400 hover:bg-red-600/30 border border-red-600/30"
-                          : "bg-green-600/20 text-green-400 hover:bg-green-600/30 border border-green-600/30"
-                      } ${togglingAutoRenew ? "opacity-50 cursor-not-allowed" : ""}`}
-                    >
-                      {togglingAutoRenew ? (
-                        <Spinner size={16} className="animate-spin" />
-                      ) : activeSubscription.autoRenew ? (
-                        "Cancel"
-                      ) : (
-                        "Resume"
-                      )}
-                    </button>
-                  </div>
-                </div>
-
-                {/* Show warning when cancelled */}
-                {!activeSubscription.autoRenew && (
-                  <div className="mt-3 p-3 bg-yellow-900/20 border border-yellow-600/30 rounded-md">
-                    <p className="text-sm text-yellow-400 flex items-start gap-2">
-                      <Warning size={16} className="mt-0.5 flex-shrink-0" />
-                      <span>
-                        Your subscription has been cancelled. You'll have access until {new Date(activeSubscription.endDate).toLocaleDateString()}, 
-                        after which your media access will be disabled. You can resume your subscription anytime before it expires.
-                      </span>
-                    </p>
-                  </div>
-                )}
-                
-                {/* Request Usage */}
-                {currentPlan && currentPlan !== "basic" && (
-                  <div className="mt-3 flex gap-4">
-                    <div className="flex items-center gap-2">
-                      <FilmSlate size={16} className="text-orange-400" />
-                      <span className="text-sm">
-                        Movies: {activeSubscription.movieRequestsUsed || 0}/{subscriptionPlans.find(p => p.id === currentPlan)?.features.movieRequests || 0}
-                      </span>
-                    </div>
-                    {(subscriptionPlans.find(p => p.id === currentPlan)?.features.tvRequests || 0) > 0 && (
-                      <div className="flex items-center gap-2">
-                        <Television size={16} className="text-teal-400" />
-                        <span className="text-sm">
-                          TV: {activeSubscription.tvRequestsUsed || 0}/{subscriptionPlans.find(p => p.id === currentPlan)?.features.tvRequests || 0}
-                        </span>
-                      </div>
-                    )}
-                  </div>
-                )}
-                
-                {/* Booster Packs Button - Hide when cancelled */}
-                {currentPlan && !isCancelled && (
-                  <button
-                    onClick={() => setShowBoosterPacks(!showBoosterPacks)}
-                    className="mt-3 text-sm bg-gradient-to-r from-orange-500 to-red-500 px-3 py-1 rounded-md hover:opacity-90 transition flex items-center gap-2"
-                  >
-                    <Lightning size={16} />
-                    {showBoosterPacks ? "Hide" : "Show"} Booster Packs
-                  </button>
-                )}
-              </>
-            )}
-          </div>
-          <div className="text-right">
-            <p className="text-2xl font-bold text-yellow-400">{tokenBalance} tokens</p>
-            <button
-              onClick={() => navigate("/store")}
-              className="mt-2 text-sm text-purple-400 hover:text-purple-300 underline"
-            >
-              Get more tokens
-            </button>
-          </div>
+      <div className="relative p-6 max-w-7xl mx-auto">
+        {/* Header */}
+        <div className="text-center mb-12">
+          <h1 className="text-5xl font-bold mb-3">
+            <span className="bg-gradient-to-r from-purple-400 via-pink-400 to-blue-400 bg-clip-text text-transparent">
+              Media Dashboard
+            </span>
+          </h1>
+          <p className="text-gray-400 text-lg">Your streaming command center</p>
         </div>
-      </div>
 
-      {!isLinked ? (
-        <div className="p-4 bg-gray-800 text-white rounded-lg flex flex-col items-center shadow-md">
-          <div className="flex items-center mb-4">
-            <Info size={24} className="mr-2 text-blue-400" />
-            <h3 className="text-2xl font-bold text-white">Media Account Not Linked</h3>
+        {error && (
+          <div className="mb-8 p-4 bg-red-500/10 border border-red-500/30 rounded-2xl backdrop-blur-md">
+            <p className="text-red-400 flex items-center gap-2">
+              <Warning size={20} weight="fill" />
+              {error}
+            </p>
           </div>
-          <p className="mb-4 text-white text-center">
-            Your media account is not yet linked. Please complete the setup process via the{" "}
-            <a href="/auth" className="text-white hover:underline">
-              authentication page
-            </a>{" "}
-            to link your account.
-          </p>
-        </div>
-      ) : (
-        <>
-          {/* Booster Packs Section - Hide when cancelled */}
-          {showBoosterPacks && activeSubscription && !isCancelled && (
-            <div className="mb-6 p-4 bg-gray-800 rounded-lg">
-              <h3 className="text-xl font-semibold mb-4 flex items-center">
-                <Lightning size={24} className="mr-2 text-yellow-400" />
-                Power-Up Booster Packs
-              </h3>
-              <p className="text-sm text-gray-400 mb-4">
-                Need more requests this month? Get instant access with booster packs!
-              </p>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {boosterPacks.map((booster) => (
-                  <div
-                    key={booster.id}
-                    className={`p-4 border-2 rounded-lg border-gray-700 hover:border-${booster.color}-500 transition`}
-                  >
-                    <div className={`flex items-center mb-2 text-${booster.color}-400`}>
-                      {booster.icon}
-                      <h4 className="text-lg font-semibold ml-2">{booster.name}</h4>
-                    </div>
-                    <p className="text-sm text-gray-300 mb-3">{booster.description}</p>
-                    <div className="flex justify-between items-center">
-                      <p className="text-xl font-bold text-yellow-400">{booster.tokens} tokens</p>
-                      <button
-                        onClick={() => handlePurchaseBooster(booster.id)}
-                        disabled={purchasingBooster === booster.id || tokenBalance < booster.tokens}
-                        className={`px-4 py-2 rounded-md text-sm font-semibold transition ${
-                          purchasingBooster === booster.id || tokenBalance < booster.tokens
-                            ? "bg-gray-600 cursor-not-allowed opacity-50"
-                            : `bg-gradient-to-r from-${booster.color}-500 to-${booster.color}-600 hover:opacity-90`
-                        } text-white`}
-                      >
-                        {purchasingBooster === booster.id ? (
-                          <Spinner size={16} className="animate-spin" />
-                        ) : tokenBalance < booster.tokens ? (
-                          "Not enough tokens"
-                        ) : (
-                          "Buy Now"
-                        )}
-                      </button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
+        )}
 
-          {/* Subscription Plans - Hide when cancelled */}
-          {!isCancelled && (
-            <div className="mb-6">
-              <h2 className="text-2xl font-bold mb-4">
-                {activeSubscription ? "Upgrade Your Plan" : "Choose Your Plan"}
-              </h2>
-              
-              {/* Billing Period Toggle */}
-              <div className="flex justify-center mb-6">
-                <div className="bg-gray-800 rounded-lg p-1 flex">
-                  <button
-                    onClick={() => setBillingPeriod("monthly")}
-                    className={`px-4 py-2 rounded-md transition ${
-                      billingPeriod === "monthly"
-                        ? "bg-purple-500 text-white"
-                        : "text-gray-400 hover:text-white"
-                    }`}
-                  >
-                    Monthly
-                  </button>
-                  <button
-                    onClick={() => setBillingPeriod("yearly")}
-                    className={`px-4 py-2 rounded-md transition ${
-                      billingPeriod === "yearly"
-                        ? "bg-purple-500 text-white"
-                        : "text-gray-400 hover:text-white"
-                    }`}
-                  >
-                    Yearly (Save up to 20%)
-                  </button>
+        {!isLinked ? (
+          <div className="max-w-2xl mx-auto">
+            <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-blue-500/10 to-purple-500/10 backdrop-blur-md border border-white/10 p-8">
+              <div className="absolute inset-0 bg-gradient-to-br from-blue-500/20 to-transparent"></div>
+              <div className="relative flex items-start gap-6">
+                <div className="p-4 bg-blue-500/20 rounded-2xl backdrop-blur-sm">
+                  <Info size={32} className="text-blue-400" />
                 </div>
-              </div>
-
-              {/* Plans Grid */}
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {subscriptionPlans.map((plan) => {
-                  // Determine if this plan is selectable
-                  const currentPlanIndex = currentPlan ? subscriptionPlans.findIndex(p => p.id === currentPlan) : -1;
-                  const thisPlanIndex = subscriptionPlans.findIndex(p => p.id === plan.id);
-                  const isLowerTier = currentPlan && thisPlanIndex < currentPlanIndex;
-                  const isCurrentPlan = currentPlan === plan.id;
-                  const isSelectable = !isCurrentPlan && !isLowerTier;
-
-                  return (
-                    <div
-                      key={plan.id}
-                      className={`relative p-4 border-2 rounded-lg transition ${
-                        selectedPlan === plan.id
-                          ? `border-${plan.color}-500 bg-gray-800/50`
-                          : isLowerTier
-                          ? "border-gray-700 opacity-50 cursor-not-allowed"
-                          : "border-gray-700 hover:border-gray-600 cursor-pointer"
-                      } ${currentPlan === plan.id ? "ring-2 ring-green-500" : ""}`}
-                      onClick={() => {
-                        if (isSelectable && !isLowerTier) {
-                          setSelectedPlan(plan.id);
-                        }
-                      }}
-                    >
-                      {plan.popular && (
-                        <div className="absolute -top-3 left-1/2 transform -translate-x-1/2 bg-purple-500 text-white px-3 py-1 rounded-full text-xs">
-                          Most Popular
-                        </div>
-                      )}
-                      {currentPlan === plan.id && (
-                        <div className="absolute -top-3 right-4 bg-green-500 text-white px-3 py-1 rounded-full text-xs">
-                          Current Plan
-                        </div>
-                      )}
-                      {isLowerTier && (
-                        <div className="absolute -top-3 right-4 bg-gray-600 text-gray-300 px-3 py-1 rounded-full text-xs">
-                          Lower Tier
-                        </div>
-                      )}
-                      
-                      <div className={`flex items-center mb-3 text-${plan.color}-400`}>
-                        {plan.icon}
-                        <h3 className="text-xl font-semibold ml-2">{plan.name}</h3>
-                      </div>
-                      
-                      <p className="text-2xl font-bold mb-1">
-                        {billingPeriod === "monthly" ? plan.monthlyTokens : plan.yearlyTokens} tokens
-                      </p>
-                      <p className="text-sm text-gray-400 mb-4">
-                        per {billingPeriod === "monthly" ? "month" : "year"}
-                        {billingPeriod === "yearly" && (
-                          <span className="text-green-400 ml-1">
-                            (save {plan.monthlyTokens * 12 - plan.yearlyTokens} tokens)
-                          </span>
-                        )}
-                      </p>
-                      
-                      <ul className="text-sm space-y-2">
-                        <li className="flex items-center">
-                          <Check size={16} className="text-green-400 mr-2" />
-                          Full library access
-                        </li>
-                        <li className="flex items-center">
-                          <Check size={16} className="text-green-400 mr-2" />
-                          {plan.features.streams} stream{plan.features.streams !== 1 ? "s" : ""}
-                        </li>
-                        <li className="flex items-center">
-                          {plan.features.downloads ? (
-                            <Check size={16} className="text-green-400 mr-2" />
-                          ) : (
-                            <X size={16} className="text-red-400 mr-2" />
-                          )}
-                          Downloads
-                        </li>
-                        <li className="flex items-center">
-                          <FilmSlate size={16} className="mr-2 text-gray-400" />
-                          {plan.features.movieRequests === 0
-                            ? "No movie requests"
-                            : `${plan.features.movieRequests} movie request${plan.features.movieRequests > 1 ? "s" : ""}/month`}
-                        </li>
-                        <li className="flex items-center">
-                          <Television size={16} className="mr-2 text-gray-400" />
-                          {plan.features.tvRequests === 0
-                            ? "No TV requests"
-                            : `${plan.features.tvRequests} TV show${plan.features.tvRequests > 1 ? "s" : ""}/month`}
-                        </li>
-                        <li className="flex items-center">
-                          {plan.features.support === "priority" ? (
-                            <Star size={16} className="text-yellow-400 mr-2" />
-                          ) : (
-                            <Info size={16} className="text-gray-400 mr-2" />
-                          )}
-                          {plan.features.support === "priority" ? "Priority" : "Regular"} support
-                        </li>
-                      </ul>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          )}
-
-          {/* Redemption Section */}
-          {selectedPlan && !isCancelled && (() => {
-          const currentPlanIndex = currentPlan ? subscriptionPlans.findIndex(p => p.id === currentPlan) : -1;
-          const selectedPlanIndex = subscriptionPlans.findIndex(p => p.id === selectedPlan);
-          const isUpgrade = currentPlan && selectedPlanIndex > currentPlanIndex;
-          const isNewSubscription = !currentPlan;
-          
-          // Only show completion panel for new subscriptions or upgrades
-          if (!isNewSubscription && !isUpgrade) return null;
-          
-          return (
-            <div className="mb-6 p-4 bg-gray-800 rounded-lg">
-              <h3 className="text-xl font-semibold mb-4">Complete Your Subscription</h3>
-              
-              <div className="mb-4">
-                <p className="text-gray-300 mb-2">Total Cost</p>
-                <p className="text-2xl font-bold text-yellow-400">
-                  {finalCost} tokens
-                  {proRateCredit > 0 && currentPlan && selectedPlan !== currentPlan && (
-                    <span className="text-sm text-green-400 ml-2">
-                      (Pro-rate credit: {proRateCredit} tokens)
-                    </span>
-                  )}
-                </p>
-                {tokenBalance < finalCost && (
-                  <p className="text-red-400 text-sm mt-1">
-                    You need {finalCost - tokenBalance} more tokens
+                <div className="flex-1">
+                  <h3 className="text-2xl font-bold text-white mb-3">Complete Your Setup</h3>
+                  <p className="text-gray-300 mb-6 leading-relaxed">
+                    Your media account needs to be linked to start streaming. This quick setup will get you access to thousands of movies and shows.
                   </p>
-                )}
+                  <a 
+                    href="/auth" 
+                    className="inline-flex items-center gap-3 px-6 py-3 bg-gradient-to-r from-blue-500 to-purple-500 hover:from-blue-600 hover:to-purple-600 text-white rounded-xl font-medium transition-all transform hover:scale-105 shadow-lg shadow-purple-500/25"
+                  >
+                    Complete Setup
+                    <ArrowRight size={20} />
+                  </a>
+                </div>
               </div>
-              
-              {/* Auto-Renew Toggle for NEW subscriptions */}
-              {!activeSubscription && (
-                <div className="mb-4 p-3 bg-gray-700 rounded-md">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="font-medium text-white">Auto-Renewal</p>
-                      <p className="text-sm text-gray-400">
-                        {autoRenewEnabled 
-                          ? "Your subscription will automatically renew each period"
-                          : "Your subscription will expire at the end of the billing period"
-                        }
-                      </p>
+            </div>
+          </div>
+        ) : (
+          <>
+            {/* Account Overview Card */}
+            <div className="mb-10 relative">
+              <div className="absolute inset-0 bg-gradient-to-r from-purple-500/20 to-pink-500/20 rounded-3xl blur-xl"></div>
+              <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-gray-800/80 to-gray-900/80 backdrop-blur-xl border border-white/10">
+                <div className="absolute top-0 right-0 w-64 h-64 bg-gradient-to-br from-purple-500/20 to-transparent rounded-full blur-3xl"></div>
+                
+                <div className="relative p-8">
+                  <div className="flex flex-wrap gap-8 items-start justify-between">
+                    {/* User Info Section */}
+                    <div className="flex-1 min-w-[300px]">
+                      <div className="flex items-center gap-5 mb-8">
+                        <div className="relative">
+                          <div className="w-20 h-20 rounded-2xl bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center shadow-lg shadow-purple-500/50">
+                            <span className="text-3xl font-bold text-white">
+                              {username.charAt(0).toUpperCase()}
+                            </span>
+                          </div>
+                          <div className="absolute -bottom-2 -right-2 w-8 h-8 bg-green-500 rounded-full flex items-center justify-center border-4 border-gray-800">
+                            <Check size={16} className="text-white" weight="bold" />
+                          </div>
+                        </div>
+                        <div>
+                          <h2 className="text-3xl font-bold text-white mb-1">{username}</h2>
+                          <div className="flex items-center gap-3">
+                            {activeSubscription ? (
+                              activeSubscription.autoRenew ? (
+                                <div className="flex items-center gap-2 px-3 py-1 bg-green-500/20 rounded-full">
+                                  <CheckCircle size={16} weight="fill" className="text-green-400" />
+                                  <span className="text-sm font-medium text-green-400">Active</span>
+                                </div>
+                              ) : (
+                                <div className="flex items-center gap-2 px-3 py-1 bg-yellow-500/20 rounded-full">
+                                  <Clock size={16} weight="fill" className="text-yellow-400" />
+                                  <span className="text-sm font-medium text-yellow-400">Ending Soon</span>
+                                </div>
+                              )
+                            ) : (
+                              <div className="flex items-center gap-2 px-3 py-1 bg-gray-500/20 rounded-full">
+                                <X size={16} weight="bold" className="text-gray-400" />
+                                <span className="text-sm font-medium text-gray-400">No Subscription</span>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+
+                      {currentPlan && activeSubscription && (
+                        <>
+                          {/* Plan Info */}
+                          <div className="mb-6 p-6 bg-white/5 rounded-2xl backdrop-blur-sm border border-white/10">
+                            <div className="flex items-center justify-between mb-4">
+                              <div className="flex items-center gap-3">
+                                <div className={`p-3 rounded-xl bg-gradient-to-br ${subscriptionPlans.find(p => p.id === currentPlan)?.gradient} shadow-lg`}>
+                                  {subscriptionPlans.find(p => p.id === currentPlan)?.icon}
+                                </div>
+                                <div>
+                                  <h3 className="text-xl font-semibold text-white">
+                                    {subscriptionPlans.find(p => p.id === currentPlan)?.name} Plan
+                                  </h3>
+                                  <p className="text-sm text-gray-400">
+                                    {activeSubscription.billingPeriod}ly subscription
+                                  </p>
+                                </div>
+                              </div>
+                              <div className="text-right">
+                                <p className="text-2xl font-bold text-white">{activeSubscription.daysRemaining}</p>
+                                <p className="text-xs text-gray-400">days left</p>
+                              </div>
+                            </div>
+
+                            {/* Progress Bar */}
+                            <div className="mb-4">
+                              <div className="flex justify-between text-xs text-gray-400 mb-2">
+                                <span>Started {new Date(activeSubscription.startDate).toLocaleDateString()}</span>
+                                <span>Ends {new Date(activeSubscription.endDate).toLocaleDateString()}</span>
+                              </div>
+                              <div className="relative h-3 bg-gray-700/50 rounded-full overflow-hidden">
+                                <div 
+                                  className={`absolute inset-y-0 left-0 rounded-full bg-gradient-to-r ${
+                                    activeSubscription.autoRenew 
+                                      ? 'from-green-500 to-emerald-500' 
+                                      : 'from-yellow-500 to-orange-500'
+                                  } shadow-lg`}
+                                  style={{
+                                    width: `${Math.max(5, (activeSubscription.daysRemaining / 30) * 100)}%`
+                                  }}
+                                >
+                                  <div className="absolute inset-0 bg-white/20 animate-pulse"></div>
+                                </div>
+                              </div>
+                            </div>
+
+                            {/* Auto-Renewal Toggle */}
+                            <div className="flex items-center justify-between p-4 bg-gray-800/50 rounded-xl">
+                              <div className="flex items-center gap-3">
+                                <div className={`p-2 rounded-lg ${
+                                  activeSubscription.autoRenew 
+                                    ? 'bg-green-500/20 text-green-400' 
+                                    : 'bg-yellow-500/20 text-yellow-400'
+                                }`}>
+                                  <CreditCard size={20} />
+                                </div>
+                                <div>
+                                  <p className="font-medium text-white">
+                                    {activeSubscription.autoRenew ? 'Auto-Renewal On' : 'Manual Renewal'}
+                                  </p>
+                                  <p className="text-xs text-gray-400">
+                                    {activeSubscription.autoRenew 
+                                      ? 'Renews automatically' 
+                                      : 'Renew manually before expiry'
+                                    }
+                                  </p>
+                                </div>
+                              </div>
+                              <button
+                                onClick={handleToggleAutoRenew}
+                                disabled={togglingAutoRenew}
+                                className={`relative px-4 py-2 rounded-xl text-sm font-medium transition-all ${
+                                  activeSubscription.autoRenew
+                                    ? "bg-gray-700 hover:bg-gray-600 text-gray-300"
+                                    : "bg-gradient-to-r from-green-500 to-emerald-500 hover:from-green-600 hover:to-emerald-600 text-white shadow-lg shadow-green-500/25"
+                                } ${togglingAutoRenew ? "opacity-50 cursor-not-allowed" : ""}`}
+                              >
+                                {togglingAutoRenew ? (
+                                  <Spinner size={16} className="animate-spin" />
+                                ) : (
+                                  activeSubscription.autoRenew ? "Turn Off" : "Turn On"
+                                )}
+                              </button>
+                            </div>
+                          </div>
+
+                          {/* Request Usage */}
+                          <div className="grid grid-cols-2 gap-4 mb-6">
+                            <div className="p-5 bg-gradient-to-br from-orange-500/20 to-orange-500/10 rounded-2xl border border-orange-500/20 backdrop-blur-sm">
+                              <div className="flex items-center justify-between mb-3">
+                                <FilmSlate size={24} className="text-orange-400" />
+                                <span className="text-xs px-2 py-1 bg-orange-500/20 rounded-full text-orange-400 font-medium">Movies</span>
+                              </div>
+                              <p className="text-3xl font-bold text-white mb-1">
+                                {(subscriptionPlans.find(p => p.id === currentPlan)?.features.movieRequests || 0) - (activeSubscription.movieRequestsUsed || 0)}
+                              </p>
+                              <p className="text-xs text-gray-400">
+                                of {subscriptionPlans.find(p => p.id === currentPlan)?.features.movieRequests || 0} available
+                              </p>
+                            </div>
+                            
+                            <div className="p-5 bg-gradient-to-br from-teal-500/20 to-teal-500/10 rounded-2xl border border-teal-500/20 backdrop-blur-sm">
+                              <div className="flex items-center justify-between mb-3">
+                                <Television size={24} className="text-teal-400" />
+                                <span className="text-xs px-2 py-1 bg-teal-500/20 rounded-full text-teal-400 font-medium">TV Shows</span>
+                              </div>
+                              <p className="text-3xl font-bold text-white mb-1">
+                                {(subscriptionPlans.find(p => p.id === currentPlan)?.features.tvRequests || 0) - (activeSubscription.tvRequestsUsed || 0)}
+                              </p>
+                              <p className="text-xs text-gray-400">
+                                of {subscriptionPlans.find(p => p.id === currentPlan)?.features.tvRequests || 0} available
+                              </p>
+                            </div>
+                          </div>
+
+                          {/* Booster Packs Button */}
+                          {!isCancelled && (
+                            <button
+                              onClick={() => setShowBoosterPacks(!showBoosterPacks)}
+                              className="w-full py-4 bg-gradient-to-r from-purple-500/10 to-pink-500/10 hover:from-purple-500/20 hover:to-pink-500/20 rounded-2xl transition-all flex items-center justify-center gap-3 border border-purple-500/20 backdrop-blur-sm group"
+                            >
+                              <Lightning size={20} className="text-purple-400 group-hover:text-purple-300" />
+                              <span className="text-white font-medium">{showBoosterPacks ? "Hide" : "View"} Power-Ups</span>
+                              <Sparkle size={16} className="text-yellow-400" />
+                            </button>
+                          )}
+                        </>
+                      )}
                     </div>
+
+                    {/* Token Balance */}
+                    <div className="flex-shrink-0">
+                      <div className="relative">
+                        <div className="absolute inset-0 bg-gradient-to-br from-yellow-500/30 to-orange-500/30 rounded-2xl blur-xl"></div>
+                        <div className="relative bg-gradient-to-br from-gray-800 to-gray-900 rounded-2xl p-6 border border-yellow-500/20">
+                          <div className="flex items-center gap-2 mb-3">
+                            <Coins size={20} className="text-yellow-400" />
+                            <p className="text-sm font-medium text-yellow-400">Token Balance</p>
+                          </div>
+                          <p className="text-4xl font-bold text-white mb-4">{tokenBalance}</p>
+                          <button
+                            onClick={() => navigate("/store")}
+                            className="w-full py-2 px-4 bg-gradient-to-r from-yellow-500/20 to-orange-500/20 hover:from-yellow-500/30 hover:to-orange-500/30 text-yellow-400 rounded-xl transition-all flex items-center justify-center gap-2 group"
+                          >
+                            <span className="text-sm font-medium">Add Tokens</span>
+                            <ArrowRight size={16} className="group-hover:translate-x-1 transition-transform" />
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Booster Packs Section */}
+            {showBoosterPacks && activeSubscription && !isCancelled && (
+              <div className="mb-10">
+                <div className="flex items-center justify-between mb-6">
+                  <h2 className="text-2xl font-bold text-white flex items-center gap-3">
+                    <Lightning size={28} className="text-yellow-400" />
+                    Power-Up Booster Packs
+                  </h2>
+                  <p className="text-gray-400">Instant request upgrades</p>
+                </div>
+                
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                  {boosterPacks.map((booster) => (
+                    <div
+                      key={booster.id}
+                      className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-gray-800/80 to-gray-900/80 backdrop-blur-xl border border-white/10 hover:border-white/20 transition-all transform hover:scale-105"
+                    >
+                      <div className={`absolute inset-0 bg-gradient-to-br ${booster.gradient} opacity-10`}></div>
+                      <div className="relative p-6">
+                        <div className={`inline-flex p-3 rounded-xl bg-gradient-to-br ${booster.gradient} mb-4 shadow-lg`}>
+                          {booster.icon}
+                        </div>
+                        <h3 className="text-lg font-semibold text-white mb-1">{booster.name}</h3>
+                        <p className="text-sm text-gray-400 mb-4">{booster.description}</p>
+                        <div className="flex items-end justify-between">
+                          <p className="text-2xl font-bold text-white">{booster.tokens} <span className="text-sm text-gray-400">tokens</span></p>
+                          <button
+                            onClick={() => handlePurchaseBooster(booster.id)}
+                            disabled={purchasingBooster === booster.id || tokenBalance < booster.tokens}
+                            className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
+                              purchasingBooster === booster.id || tokenBalance < booster.tokens
+                                ? "bg-gray-700 text-gray-400 cursor-not-allowed"
+                                : `bg-gradient-to-r ${booster.gradient} text-white hover:shadow-lg transform hover:scale-105`
+                            }`}
+                          >
+                            {purchasingBooster === booster.id ? (
+                              <Spinner size={14} className="animate-spin" />
+                            ) : tokenBalance < booster.tokens ? (
+                              "Not enough"
+                            ) : (
+                              "Buy Now"
+                            )}
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Subscription Plans */}
+            {!isCancelled && (
+              <div className="mb-10">
+                <div className="text-center mb-8">
+                  <h2 className="text-3xl font-bold text-white mb-3">
+                    {activeSubscription ? "Upgrade Your Experience" : "Choose Your Plan"}
+                  </h2>
+                  <p className="text-gray-400">
+                    {activeSubscription ? "Switch to a better plan anytime" : "Start streaming thousands of titles"}
+                  </p>
+                </div>
+                
+                {/* Billing Toggle */}
+                <div className="flex justify-center mb-8">
+                  <div className="inline-flex p-1 bg-gray-800/50 rounded-2xl backdrop-blur-sm">
                     <button
-                      onClick={() => setAutoRenewEnabled(!autoRenewEnabled)}
-                      className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-                        autoRenewEnabled ? 'bg-purple-500' : 'bg-gray-600'
+                      onClick={() => setBillingPeriod("monthly")}
+                      className={`px-6 py-3 rounded-xl font-medium transition-all ${
+                        billingPeriod === "monthly"
+                          ? "bg-gradient-to-r from-purple-500 to-pink-500 text-white shadow-lg"
+                          : "text-gray-400 hover:text-white"
                       }`}
                     >
-                      <span
-                        className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                          autoRenewEnabled ? 'translate-x-6' : 'translate-x-1'
-                        }`}
-                      />
+                      Monthly
+                    </button>
+                    <button
+                      onClick={() => setBillingPeriod("yearly")}
+                      className={`px-6 py-3 rounded-xl font-medium transition-all flex items-center gap-2 ${
+                        billingPeriod === "yearly"
+                          ? "bg-gradient-to-r from-purple-500 to-pink-500 text-white shadow-lg"
+                          : "text-gray-400 hover:text-white"
+                      }`}
+                    >
+                      Yearly
+                      <span className="text-xs px-2 py-0.5 bg-green-500/20 rounded-full text-green-400">Save 20%</span>
                     </button>
                   </div>
                 </div>
-              )}
-              
-              {/* Show pro-rate info for plan changes */}
-              {currentPlan && selectedPlan !== currentPlan && (
-                <div className="mb-4 p-3 bg-gray-700 rounded-md">
-                  <p className="text-sm text-gray-300">
-                    <span className="text-green-400 font-semibold">Upgrade Benefits:</span> Immediate access to new features. 
-                    Pro-rated credit of {proRateCredit} tokens applied from your current plan.
-                  </p>
+
+                {/* Plans Grid */}
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                  {subscriptionPlans.map((plan) => {
+                    const currentPlanIndex = currentPlan ? subscriptionPlans.findIndex(p => p.id === currentPlan) : -1;
+                    const thisPlanIndex = subscriptionPlans.findIndex(p => p.id === plan.id);
+                    const isLowerTier = currentPlan && thisPlanIndex < currentPlanIndex;
+                    const isCurrentPlan = currentPlan === plan.id;
+                    const isSelectable = !isCurrentPlan && !isLowerTier;
+
+                    return (
+                      <div
+                        key={plan.id}
+                        className={`relative overflow-hidden rounded-2xl transition-all transform ${
+                          isSelectable ? "hover:scale-105 cursor-pointer" : ""
+                        } ${selectedPlan === plan.id ? "ring-2 ring-purple-500 ring-offset-2 ring-offset-gray-900" : ""}`}
+                        onClick={() => {
+                          if (isSelectable) {
+                            setSelectedPlan(plan.id);
+                          }
+                        }}
+                      >
+                        {/* Background */}
+                        <div className={`absolute inset-0 bg-gradient-to-br ${plan.gradient} ${
+                          isLowerTier ? "opacity-5" : "opacity-10"
+                        }`}></div>
+                        
+                        {/* Content */}
+                        <div className={`relative p-6 bg-gray-800/80 backdrop-blur-xl border ${
+                          isLowerTier ? "opacity-50 border-gray-700" : "border-white/10 hover:border-white/20"
+                        }`}>
+                          {/* Badges */}
+                          {plan.popular && !isCurrentPlan && (
+                            <div className="absolute -top-2 -right-2">
+                              <div className="px-3 py-1 bg-gradient-to-r from-purple-500 to-pink-500 rounded-full text-xs font-medium text-white shadow-lg">
+                                Popular
+                              </div>
+                            </div>
+                          )}
+                          {isCurrentPlan && (
+                            <div className="absolute -top-2 -right-2">
+                              <div className="px-3 py-1 bg-green-500 rounded-full text-xs font-medium text-white shadow-lg flex items-center gap-1">
+                                <Check size={12} weight="bold" />
+                                Current
+                              </div>
+                            </div>
+                          )}
+                          {isLowerTier && (
+                            <div className="absolute -top-2 -right-2">
+                              <div className="px-3 py-1 bg-gray-600 rounded-full text-xs font-medium text-gray-300">
+                                Lower Tier
+                              </div>
+                            </div>
+                          )}
+                          
+                          {/* Plan Icon */}
+                          <div className={`inline-flex p-3 rounded-xl bg-gradient-to-br ${plan.gradient} mb-4 shadow-lg`}>
+                            {plan.icon}
+                          </div>
+                          
+                          {/* Plan Name */}
+                          <h3 className="text-xl font-bold text-white mb-2">{plan.name}</h3>
+                          
+                          {/* Price */}
+                          <div className="mb-6">
+                            <p className="text-3xl font-bold text-white">
+                              {billingPeriod === "monthly" ? plan.monthlyTokens : plan.yearlyTokens}
+                            </p>
+                            <p className="text-sm text-gray-400">
+                              tokens/{billingPeriod === "monthly" ? "month" : "year"}
+                            </p>
+                            {billingPeriod === "yearly" && (
+                              <p className="text-xs text-green-400 mt-1">
+                                Save {plan.monthlyTokens * 12 - plan.yearlyTokens} tokens
+                              </p>
+                            )}
+                          </div>
+                          
+                          {/* Features */}
+                          <ul className="space-y-3 text-sm">
+                            <li className="flex items-center gap-2 text-gray-300">
+                              <Monitor size={16} className="text-gray-400" />
+                              <span>{plan.features.streams} simultaneous stream{plan.features.streams !== 1 ? "s" : ""}</span>
+                            </li>
+                            <li className="flex items-center gap-2 text-gray-300">
+                              <CloudArrowDown size={16} className="text-gray-400" />
+                              <span>Offline downloads</span>
+                            </li>
+                            <li className="flex items-center gap-2 text-gray-300">
+                              <FilmSlate size={16} className="text-gray-400" />
+                              <span>{plan.features.movieRequests} movie request{plan.features.movieRequests !== 1 ? "s" : ""}</span>
+                            </li>
+                            <li className="flex items-center gap-2 text-gray-300">
+                              <Television size={16} className="text-gray-400" />
+                              <span>{plan.features.tvRequests} TV request{plan.features.tvRequests !== 1 ? "s" : ""}</span>
+                            </li>
+                            {plan.features.support === "priority" && (
+                              <li className="flex items-center gap-2 text-yellow-400">
+                                <Headphones size={16} />
+                                <span className="font-medium">Priority support</span>
+                              </li>
+                            )}
+                          </ul>
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
-              )}
-              
-              <div className="flex gap-4">
-                <button
-                  onClick={handleRedeemSubscription}
-                  disabled={redeeming || tokenBalance < finalCost}
-                  className={`flex-1 py-2 px-4 rounded-md font-semibold transition ${
-                    redeeming || tokenBalance < finalCost
-                      ? "bg-gray-600 cursor-not-allowed opacity-50"
-                      : "bg-gradient-to-r from-purple-500 to-pink-500 hover:opacity-90"
-                  } text-white`}
-                >
-                  {redeeming ? (
-                    <Spinner size={20} className="animate-spin mx-auto" />
-                  ) : tokenBalance < finalCost ? (
-                    "Insufficient Tokens"
-                  ) : activeSubscription ? (
-                    "Upgrade Now"
-                  ) : (
-                    "Subscribe Now"
-                  )}
-                </button>
-                
-                {tokenBalance < finalCost && (
-                  <button
-                    onClick={() => navigate("/store")}
-                    className="py-2 px-4 bg-purple-600 text-white rounded-md hover:bg-purple-700 transition"
-                  >
-                    Get Tokens
-                  </button>
-                )}
               </div>
-            </div>
-          );
-        })()}
-        </>
-      )}
+            )}
+
+            {/* Subscription Confirmation */}
+            {selectedPlan && !isCancelled && (() => {
+              const currentPlanIndex = currentPlan ? subscriptionPlans.findIndex(p => p.id === currentPlan) : -1;
+              const selectedPlanIndex = subscriptionPlans.findIndex(p => p.id === selectedPlan);
+              const isUpgrade = currentPlan && selectedPlanIndex > currentPlanIndex;
+              const isNewSubscription = !currentPlan;
+              
+              if (!isNewSubscription && !isUpgrade) return null;
+              
+              return (
+                <div className="max-w-2xl mx-auto">
+                  <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-purple-500/10 to-pink-500/10 backdrop-blur-xl border border-white/10 p-8">
+                    <div className="absolute inset-0 bg-gradient-to-br from-purple-500/20 to-transparent"></div>
+                    
+                    <div className="relative">
+                      <h3 className="text-2xl font-bold text-white mb-6 text-center">Confirm Your {isUpgrade ? "Upgrade" : "Subscription"}</h3>
+                      
+                      {/* Selected Plan Summary */}
+                      <div className="mb-6 p-4 bg-white/5 rounded-2xl backdrop-blur-sm border border-white/10">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-3">
+                            <div className={`p-3 rounded-xl bg-gradient-to-br ${subscriptionPlans.find(p => p.id === selectedPlan)?.gradient} shadow-lg`}>
+                              {subscriptionPlans.find(p => p.id === selectedPlan)?.icon}
+                            </div>
+                            <div>
+                              <p className="font-semibold text-white">
+                                {subscriptionPlans.find(p => p.id === selectedPlan)?.name} Plan
+                              </p>
+                              <p className="text-sm text-gray-400">{billingPeriod}ly billing</p>
+                            </div>
+                          </div>
+                          <div className="text-right">
+                            <p className="text-2xl font-bold text-white">{finalCost}</p>
+                            <p className="text-sm text-gray-400">tokens</p>
+                          </div>
+                        </div>
+                      </div>
+                      
+                      {/* Pro-rate Credit */}
+                      {proRateCredit > 0 && isUpgrade && (
+                        <div className="mb-6 p-4 bg-green-500/10 rounded-2xl border border-green-500/20">
+                          <div className="flex items-center gap-3">
+                            <Gift size={24} className="text-green-400" />
+                            <div>
+                              <p className="font-medium text-green-400">Pro-rate Credit Applied</p>
+                              <p className="text-sm text-gray-300">
+                                {proRateCredit} tokens credited from your current plan
+                              </p>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                      
+                      {/* Auto-Renew Toggle for New Subscriptions */}
+                      {!activeSubscription && (
+                        <div className="mb-6 p-4 bg-white/5 rounded-2xl backdrop-blur-sm border border-white/10">
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-3">
+                              <div className="p-2 rounded-lg bg-purple-500/20 text-purple-400">
+                                <CreditCard size={20} />
+                              </div>
+                              <div>
+                                <p className="font-medium text-white">Auto-Renewal</p>
+                                <p className="text-sm text-gray-400">
+                                  {autoRenewEnabled ? "Renews automatically" : "Manual renewal required"}
+                                </p>
+                              </div>
+                            </div>
+                            <button
+                              onClick={() => setAutoRenewEnabled(!autoRenewEnabled)}
+                              className={`relative inline-flex h-7 w-12 items-center rounded-full transition-colors ${
+                                autoRenewEnabled ? 'bg-purple-500' : 'bg-gray-600'
+                              }`}
+                            >
+                              <span
+                                className={`inline-block h-5 w-5 transform rounded-full bg-white transition-transform shadow-lg ${
+                                  autoRenewEnabled ? 'translate-x-6' : 'translate-x-1'
+                                }`}
+                              />
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                      
+                      {/* Balance Check */}
+                      {tokenBalance < finalCost && (
+                        <div className="mb-6 p-4 bg-red-500/10 rounded-2xl border border-red-500/20">
+                          <p className="text-red-400 text-center">
+                            You need {finalCost - tokenBalance} more tokens to complete this {isUpgrade ? "upgrade" : "subscription"}
+                          </p>
+                        </div>
+                      )}
+                      
+                      {/* Action Buttons */}
+                      <div className="flex gap-4">
+                        <button
+                          onClick={() => setSelectedPlan(null)}
+                          className="flex-1 py-3 px-6 bg-gray-700 hover:bg-gray-600 text-white rounded-xl font-medium transition-all"
+                        >
+                          Cancel
+                        </button>
+                        {tokenBalance < finalCost ? (
+                          <button
+                            onClick={() => navigate("/store")}
+                            className="flex-1 py-3 px-6 bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 text-white rounded-xl font-medium transition-all shadow-lg shadow-purple-500/25"
+                          >
+                            Get Tokens
+                          </button>
+                        ) : (
+                          <button
+                            onClick={handleRedeemSubscription}
+                            disabled={redeeming}
+                            className={`flex-1 py-3 px-6 bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 text-white rounded-xl font-medium transition-all shadow-lg shadow-purple-500/25 ${
+                              redeeming ? "opacity-50 cursor-not-allowed" : ""
+                            }`}
+                          >
+                            {redeeming ? (
+                              <Spinner size={20} className="animate-spin mx-auto" />
+                            ) : isUpgrade ? (
+                              "Confirm Upgrade"
+                            ) : (
+                              "Start Subscription"
+                            )}
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              );
+            })()}
+          </>
+        )}
+      </div>
     </div>
   );
 };

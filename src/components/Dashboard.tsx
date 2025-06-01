@@ -7,7 +7,7 @@ import { collection, getDocs, doc, getDoc } from "firebase/firestore";
 import { db } from "../config/firebase";
 import { 
   GameController, PlayCircle, Coin, Rocket, 
-  Lightning, Users, Star,
+  Lightning, Users, Star, Trophy,
   ArrowRight, Sparkle
 } from "phosphor-react";
 
@@ -19,6 +19,7 @@ const Dashboard = () => {
   const [memberCount, setMemberCount] = useState<number>(0);
   const [activeServices, setActiveServices] = useState<number>(0);
   const [userSince, setUserSince] = useState<string>("2024");
+  const [totalTokensTraded, setTotalTokensTraded] = useState<number>(0);
   const [loading, setLoading] = useState(true);
 
   const services = [
@@ -52,6 +53,7 @@ const Dashboard = () => {
   }> = [
     { label: "Active Services", value: activeServices.toString(), icon: Lightning },
     { label: "Platform Members", value: memberCount > 999 ? `${(memberCount/1000).toFixed(1)}K` : memberCount.toString(), icon: Users },
+    { label: "Tokens Traded", value: totalTokensTraded > 999 ? `${(totalTokensTraded/1000).toFixed(1)}K` : totalTokensTraded.toString(), icon: Trophy },
     { label: "Member Since", value: userSince, icon: Star }
   ];
 
@@ -91,6 +93,17 @@ const Dashboard = () => {
         // Count total members
         const usersSnapshot = await getDocs(collection(db, "users"));
         setMemberCount(usersSnapshot.size);
+        
+        // Count tokens traded (only user's own trades)
+        const tradesSnapshot = await getDocs(collection(db, "trades"));
+        let totalTraded = 0;
+        tradesSnapshot.forEach(doc => {
+          const trade = doc.data();
+          if (trade.senderId === user.uid || trade.receiverId === user.uid) {
+            totalTraded += trade.tokens || 0;
+          }
+        });
+        setTotalTokensTraded(totalTraded);
 
       } catch (error) {
         console.error("Error fetching dashboard data:", error);
@@ -137,19 +150,16 @@ const Dashboard = () => {
           </p>
         </div>
 
-        {/* Quick Stats */}
+        {/* Quick Stats - 4 cards */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-12">
-          {quickStats.slice(0, 3).map((stat, index) => (
+          {quickStats.map((stat, index) => (
             <div
               key={index}
-              onClick={() => stat.link && window.open(stat.link, '_blank')}
               className={`relative overflow-hidden rounded-2xl p-6 backdrop-blur-xl ${
                 theme === "dark" 
                   ? "bg-white/5 border border-white/10" 
                   : "bg-white/70 border border-gray-200"
-              } ${loading ? "animate-pulse" : ""} ${
-                stat.link ? "cursor-pointer hover:scale-[1.02] transition-transform" : ""
-              }`}
+              } ${loading ? "animate-pulse" : ""}`}
             >
               <div className="absolute top-0 right-0 w-20 h-20 bg-gradient-to-br from-purple-500/20 to-transparent rounded-full blur-2xl" />
               <div className="relative">
@@ -166,31 +176,6 @@ const Dashboard = () => {
               </div>
             </div>
           ))}
-          
-          {/* Status Badge Card */}
-          <div
-            onClick={() => window.open('https://status.gondolabros.com/', '_blank')}
-            className={`relative overflow-hidden rounded-2xl p-6 backdrop-blur-xl cursor-pointer hover:scale-[1.02] transition-transform ${
-              theme === "dark" 
-                ? "bg-white/5 border border-white/10" 
-                : "bg-white/70 border border-gray-200"
-            }`}
-          >
-            <div className="absolute top-0 right-0 w-20 h-20 bg-gradient-to-br from-green-500/20 to-transparent rounded-full blur-2xl" />
-            <div className="relative flex flex-col items-center justify-center h-full">
-              <iframe 
-                src={`https://status.gondolabros.com/badge?theme=${theme}`}
-                width="200" 
-                height="30" 
-                frameBorder="0" 
-                scrolling="no"
-                className="mb-2"
-              />
-              <p className={`text-sm ${theme === "dark" ? "text-gray-400" : "text-gray-600"}`}>
-                System Status
-              </p>
-            </div>
-          </div>
         </div>
 
         {/* Main Services */}
@@ -324,6 +309,24 @@ const Dashboard = () => {
               <div className="absolute -right-8 -bottom-8 w-32 h-32 bg-purple-500/20 rounded-full blur-2xl" />
             </div>
           </div>
+        </div>
+
+        {/* Footer Status Bar */}
+        <div className="mt-12 text-center">
+          <a 
+            href="https://status.gondolabros.com/" 
+            target="_blank" 
+            rel="noopener noreferrer"
+            className={`inline-flex items-center gap-2 px-4 py-2 rounded-full transition-all ${
+              theme === "dark" 
+                ? "bg-white/5 hover:bg-white/10 text-gray-400 hover:text-white" 
+                : "bg-gray-100 hover:bg-gray-200 text-gray-600 hover:text-gray-900"
+            }`}
+          >
+            <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse" />
+            <span className="text-sm font-medium">All Systems Operational</span>
+            <ArrowRight size={14} />
+          </a>
         </div>
       </div>
     </div>

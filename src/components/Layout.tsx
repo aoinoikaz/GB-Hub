@@ -159,6 +159,20 @@ const Layout = ({ children }: LayoutProps) => {
               </p>
             </div>
           </div>
+          
+          {/* Custom Status Indicator - Properly Aligned */}
+          <a 
+            href="https://status.gondolabros.com/"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="block mb-4"
+          >
+            <div className="flex items-center gap-2 px-3 py-2 bg-gray-800 rounded-lg hover:bg-gray-700 transition-colors">
+              <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse" />
+              <span className="text-xs text-gray-400">All services are online</span>
+            </div>
+          </a>
+          
           <button
             onClick={handleLogout}
             className={`w-full flex items-center justify-center gap-2 px-4 py-2 rounded-lg transition-colors ${
@@ -171,6 +185,7 @@ const Layout = ({ children }: LayoutProps) => {
             <span className="text-sm font-medium">Logout</span>
           </button>
         </div>
+        
       </aside>
 
       {/* Mobile Header */}

@@ -1,4 +1,4 @@
-// src/config/firebase.ts
+// src/config/firebase.ts - CLEAN VERSION
 import { initializeApp } from "firebase/app";
 import { getAuth } from "firebase/auth";
 import { getFirestore } from "firebase/firestore";

@@ -1,9 +1,10 @@
-// src/components/Dashboard.tsx - Fixed version
+// src/components/Dashboard.tsx - Fixed to use AuthContext properly
 import { useState, useEffect } from "react";
 import { useTheme } from "../context/theme-context";
 import { useAuth } from "../context/auth-context";
 import { useNavigate } from "react-router-dom";
 import { collection, getDocs, doc, getDoc, query, where } from "firebase/firestore";
+import { db } from "../config/firebase";
 import { 
   GameController, PlayCircle, Coin, Rocket, 
   Lightning, Users, Star, Trophy,
@@ -12,7 +13,7 @@ import {
 
 const Dashboard = () => {
   const { theme } = useTheme();
-  const { user, loading: authLoading } = useAuth();
+  const { user, loading: authLoading } = useAuth(); // USE THE AUTH CONTEXT!
   const navigate = useNavigate();
   const [tokenBalance, setTokenBalance] = useState<number>(0);
   const [memberCount, setMemberCount] = useState<number>(0);
@@ -61,28 +62,22 @@ const Dashboard = () => {
     let mounted = true;
 
     const fetchData = async () => {
-      // Don't proceed if auth is still loading
+      // Wait for auth context to finish loading
       if (authLoading) {
-        console.log("[Dashboard] Auth still loading, waiting...");
         return;
       }
 
-      // Don't proceed if no user
-      if (!user || !user.uid) {
-        console.log("[Dashboard] No user found");
+      // If no user after auth loads, just set loading false
+      if (!user) {
         setLoading(false);
         return;
       }
 
-      try {
-        console.log("[Dashboard] Starting data fetch for user:", user.uid);
-        
-        // Wait for auth token to be ready
-        const token = await user.getIdToken();
-        console.log("[Dashboard] Got auth token");
+      // Small delay to ensure Firestore has the auth token
+      await new Promise(resolve => setTimeout(resolve, 200));
 
-        // Add a small delay to ensure Firestore has the latest auth state
-        await new Promise(resolve => setTimeout(resolve, 100));
+      try {
+        console.log("[Dashboard] Fetching data for user:", user.uid);
 
         // Fetch user's token balance
         const userDocRef = doc(db, "users", user.uid);
@@ -157,7 +152,7 @@ const Dashboard = () => {
     return () => {
       mounted = false;
     };
-  }, [user, authLoading]); // Dependencies
+  }, [user, authLoading]); // Only depend on these
 
   const getGreeting = () => {
     const hour = new Date().getHours();
@@ -172,8 +167,8 @@ const Dashboard = () => {
     }
   };
 
-  // Show loading spinner while auth is loading
-  if (authLoading || (loading && !error)) {
+  // Show loading spinner while auth is loading OR while fetching data
+  if (authLoading || loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="text-center">
@@ -215,7 +210,6 @@ const Dashboard = () => {
           </p>
         </div>
 
-        {/* Rest of your component remains the same... */}
         {/* Quick Stats - 4 cards */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-12">
           {quickStats.map((stat, index) => (

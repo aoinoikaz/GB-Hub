@@ -1,4 +1,4 @@
-// src/components/Dashboard.tsx - Fixed to use AuthContext properly
+// src/components/Dashboard.tsx - Complete Fixed Version
 import { useState, useEffect } from "react";
 import { useTheme } from "../context/theme-context";
 import { useAuth } from "../context/auth-context";
@@ -13,7 +13,7 @@ import {
 
 const Dashboard = () => {
   const { theme } = useTheme();
-  const { user, loading: authLoading } = useAuth(); // USE THE AUTH CONTEXT!
+  const { user, loading: authLoading } = useAuth();
   const navigate = useNavigate();
   const [tokenBalance, setTokenBalance] = useState<number>(0);
   const [memberCount, setMemberCount] = useState<number>(0);
@@ -62,43 +62,56 @@ const Dashboard = () => {
     let mounted = true;
 
     const fetchData = async () => {
-      // Wait for auth context to finish loading
       if (authLoading) {
+        console.log("[Dashboard] Auth still loading, waiting...");
         return;
       }
 
-      // If no user after auth loads, just set loading false
       if (!user) {
-        setLoading(false);
+        console.log("[Dashboard] No user found after auth loaded");
+        if (mounted) {
+          setLoading(false);
+        }
         return;
       }
-
-      // Small delay to ensure Firestore has the auth token
-      await new Promise(resolve => setTimeout(resolve, 200));
 
       try {
         console.log("[Dashboard] Fetching data for user:", user.uid);
 
         // Fetch user's token balance
-        const userDocRef = doc(db, "users", user.uid);
-        const userDoc = await getDoc(userDocRef);
-        
-        if (!mounted) return;
+        try {
+          const userDocRef = doc(db, "users", user.uid);
+          console.log("[Dashboard] About to fetch user doc...");
+          const userDoc = await getDoc(userDocRef);
+          console.log("[Dashboard] User doc fetched, exists:", userDoc.exists());
+          
+          if (!mounted) return;
 
-        if (userDoc.exists()) {
-          const userData = userDoc.data();
-          setTokenBalance(userData.tokenBalance || 0);
-          
-          // Get user creation date
-          if (userData.createdAt) {
-            const createdDate = userData.createdAt.toDate();
-            setUserSince(createdDate.getFullYear().toString());
+          if (userDoc.exists()) {
+            const userData = userDoc.data();
+            console.log("[Dashboard] User data found, tokenBalance:", userData.tokenBalance);
+            setTokenBalance(userData.tokenBalance || 0);
+            
+            if (userData.createdAt) {
+              const createdDate = userData.createdAt.toDate();
+              setUserSince(createdDate.getFullYear().toString());
+            }
+          } else {
+            console.warn("[Dashboard] User document doesn't exist!");
+            setError("User profile not found. Some features may be limited.");
           }
-          
-          // Count active services based on active subscriptions
-          let services = 0;
-          
-          // Check if user has active media subscription
+        } catch (userError: any) {
+          console.error("[Dashboard] Error fetching user doc:", userError.message);
+          if (userError.code === 'permission-denied') {
+            setError("Permission denied. Please try logging out and back in.");
+          } else {
+            setError(`Failed to load user data: ${userError.message}`);
+          }
+        }
+
+        // Check subscriptions
+        try {
+          console.log("[Dashboard] Checking subscriptions...");
           const subsQuery = query(
             collection(db, "subscriptions"),
             where("userId", "==", user.uid),
@@ -106,41 +119,63 @@ const Dashboard = () => {
           );
           
           const userSubsSnapshot = await getDocs(subsQuery);
-          if (!userSubsSnapshot.empty) {
-            services++; // Media service is active
-          }
+          console.log("[Dashboard] Subscriptions found:", userSubsSnapshot.size);
           
           if (!mounted) return;
-          setActiveServices(services);
+          setActiveServices(userSubsSnapshot.empty ? 0 : 1);
+        } catch (subError: any) {
+          console.error("[Dashboard] Subscription error:", subError.message);
+          setActiveServices(0);
+          // Don't set error for subscription issues - not critical
         }
 
-        // Get platform stats - try public document first
+        // Get platform stats
         try {
+          console.log("[Dashboard] Checking stats...");
           const statsDoc = await getDoc(doc(db, "stats", "platform"));
+          
           if (statsDoc.exists() && mounted) {
             const stats = statsDoc.data();
-            setMemberCount(stats.totalUsers || 0);
-            setTotalTokensTraded(stats.totalTrades || 0);
+            console.log("[Dashboard] Stats found:", stats);
+            setMemberCount(stats.totalUsers || 150);
+            setTotalTokensTraded(stats.totalTrades || 5000);
+          } else {
+            console.log("[Dashboard] No stats doc, using defaults");
+            if (mounted) {
+              setMemberCount(150);
+              setTotalTokensTraded(5000);
+            }
           }
-        } catch (statsError) {
-          // If public stats fail, just use defaults
-          console.log("[Dashboard] Stats fetch failed, using defaults");
+        } catch (statsError: any) {
+          console.error("[Dashboard] Stats error:", statsError.message);
           if (mounted) {
-            setMemberCount(150); // Default values
+            setMemberCount(150);
             setTotalTokensTraded(5000);
           }
+          // Don't set error for stats - not critical
         }
 
       } catch (error: any) {
-        console.error("[Dashboard] Error fetching data:", error);
+        console.error("[Dashboard] Fatal error:", error.message);
+        
         if (mounted) {
-          setError(error.message);
-          // Set some default values so the UI still looks good
+          setTokenBalance(0);
+          setActiveServices(0);
           setMemberCount(150);
           setTotalTokensTraded(5000);
+          
+          // Set user-visible error
+          if (error.code === 'unavailable') {
+            setError("Firebase is temporarily unavailable. Please try again later.");
+          } else if (error.code === 'permission-denied') {
+            setError("Access denied. Please try logging out and back in.");
+          } else {
+            setError(`Dashboard failed to load: ${error.message}`);
+          }
         }
       } finally {
         if (mounted) {
+          console.log("[Dashboard] Loading complete");
           setLoading(false);
         }
       }
@@ -148,11 +183,10 @@ const Dashboard = () => {
 
     fetchData();
 
-    // Cleanup function
     return () => {
       mounted = false;
     };
-  }, [user, authLoading]); // Only depend on these
+  }, [user, authLoading]);
 
   const getGreeting = () => {
     const hour = new Date().getHours();
@@ -192,9 +226,7 @@ const Dashboard = () => {
         {/* Error message if needed */}
         {error && (
           <div className="mb-4 p-4 bg-red-500/10 border border-red-500/30 rounded-lg">
-            <p className="text-red-400 text-sm">
-              Some data couldn't be loaded. This won't affect your experience.
-            </p>
+            <p className="text-red-400 text-sm">{error}</p>
           </div>
         )}
 

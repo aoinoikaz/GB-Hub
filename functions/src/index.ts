@@ -1584,20 +1584,8 @@ exports.processSubscription = onCall<ProcessSubscriptionData, Promise<ProcessSub
         try {
           await updateEmbySubscriptionPermissions(result.embyUserId, planId);
           await syncJellyseerrUser(result.embyUserId);
-          
-          // For upgrades, update Jellyseerr with differential limits
-          if (result.isUpgrade && result.adjustedRequestLimits) {
-            console.log(`Updating Jellyseerr with differential limits:`, result.adjustedRequestLimits);
-            await updateJellyseerrRequestLimits(
-              result.email, 
-              planId, 
-              result.embyUserId,
-              result.adjustedRequestLimits
-            );
-          } else {
-            // New subscription - use full plan limits
-            await updateJellyseerrRequestLimits(result.email, planId, result.embyUserId);
-          }
+          await updateJellyseerrRequestLimits(result.email, planId, result.embyUserId);
+          console.log(`Updated Jellyseerr with ${planId} plan limits`);
         } catch (error) {
           console.error("Failed to update services:", error);
         }
@@ -1617,7 +1605,6 @@ exports.processSubscription = onCall<ProcessSubscriptionData, Promise<ProcessSub
   }
 );
 
-// New toggleAutoRenew function
 exports.toggleAutoRenew = onCall(async (request) => {
   const { userId, autoRenew } = request.data;
   const auth = request.auth;

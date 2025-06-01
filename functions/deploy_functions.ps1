@@ -34,7 +34,8 @@ $functions = @(
     "syncEmbyPassword",
     "activateEmbyAccount",
     "uploadProfileImage",
-    "checkUsername"
+    "checkUsername",
+    "toggleAutoRenew"
 )
 
 # Common deployment parameters

@@ -1,11 +1,10 @@
-// src/components/Layout.tsx - Modern Layout Wrapper
 import { useState, useEffect } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useTheme } from "../context/theme-context";
 import { useAuth } from "../context/auth-context";
 import { 
   House, Gear, SignOut, Bell, ShoppingCart, PlayCircle, 
-  GameController, Coin, Code, X, List, User
+  GameController, Coin, X, List, User
 } from "phosphor-react";
 import { getFirestore, doc, getDoc } from "firebase/firestore";
 import { signOut } from "firebase/auth";
@@ -25,12 +24,11 @@ const Layout = ({ children }: LayoutProps) => {
   const firestore = getFirestore();
 
   const navItems = [
-    { icon: House, label: "Home", path: "/dashboard", id: "services" },
-    { icon: PlayCircle, label: "Media", path: "/dashboard/media", id: "media" },
-    { icon: GameController, label: "Games", path: "/dashboard/games", id: "games" },
-    { icon: Code, label: "Dev Tools", path: "/dashboard/dev", id: "dev" },
+    { icon: House, label: "Dashboard", path: "/dashboard", id: "dashboard" },
+    { icon: PlayCircle, label: "Media", path: "/media", id: "media" },
+    { icon: GameController, label: "Games", path: "/games", id: "games" },
     { icon: Coin, label: "Store", path: "/store", id: "store" },
-    { icon: Gear, label: "Settings", path: "/dashboard/settings", id: "settings" },
+    { icon: Gear, label: "Settings", path: "/settings", id: "settings" },
   ];
 
   useEffect(() => {
@@ -271,7 +269,7 @@ const Layout = ({ children }: LayoutProps) => {
         </div>
 
         {/* Page Content */}
-        <div className="relative">
+        <div className="relative min-h-[calc(100vh-4rem)]">
           {children}
         </div>
       </main>

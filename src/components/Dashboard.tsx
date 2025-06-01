@@ -1,63 +1,45 @@
-// src/components/ModernDashboard.tsx - Modern Services Grid
+// src/components/Dashboard.tsx - Clean Modern Dashboard
 import { useTheme } from "../context/theme-context";
 import { useAuth } from "../context/auth-context";
+import { useNavigate } from "react-router-dom";
 import { 
-  GameController, PlayCircle, Code, Coin, Rocket, 
-  Lightning, Cloud, Shield, Star,
+  GameController, PlayCircle, Coin, Rocket, 
+  Lightning, Users, Star, Trophy,
   ArrowRight, Sparkle
 } from "phosphor-react";
 
 const Dashboard = () => {
   const { theme } = useTheme();
   const { user } = useAuth();
+  const navigate = useNavigate();
 
   const services = [
     {
       id: "games",
       title: "Game Development",
-      description: "Create immersive gaming experiences",
+      description: "Build immersive gaming experiences",
       icon: GameController,
       gradient: "from-orange-500 to-red-500",
-      features: ["Unity & Unreal", "Multiplayer Systems", "Game Design"],
+      features: ["Unity & Unreal Engine", "Multiplayer Systems", "Cross-Platform"],
       status: "Coming Soon",
-      link: "/dashboard/games"
+      link: "/games"
     },
     {
       id: "media",
       title: "Media Streaming",
-      description: "Your personal Netflix experience",
+      description: "Your personal streaming platform",
       icon: PlayCircle,
       gradient: "from-purple-500 to-pink-500",
-      features: ["4K Streaming", "Offline Downloads", "Request System"],
+      features: ["4K Content", "Request System", "Offline Downloads"],
       status: "Active",
-      link: "/dashboard/media"
-    },
-    {
-      id: "dev",
-      title: "Dev Tools & Cloud",
-      description: "Professional development environment",
-      icon: Code,
-      gradient: "from-blue-500 to-cyan-500",
-      features: ["Cloud IDE", "CI/CD Pipeline", "Container Registry"],
-      status: "Beta",
-      link: "/dashboard/dev"
-    },
-    {
-      id: "store",
-      title: "Token Economy",
-      description: "Manage your digital assets",
-      icon: Coin,
-      gradient: "from-yellow-500 to-orange-500",
-      features: ["Buy Tokens", "Trade System", "Rewards Program"],
-      status: "Active",
-      link: "/store"
+      link: "/media"
     }
   ];
 
-  const stats = [
-    { label: "Active Services", value: "3", icon: Lightning },
-    { label: "Storage Used", value: "245 GB", icon: Cloud },
-    { label: "Security Score", value: "98%", icon: Shield },
+  const quickStats = [
+    { label: "Active Services", value: "2", icon: Lightning },
+    { label: "Community Members", value: "1.2K", icon: Users },
+    { label: "Projects Built", value: "47", icon: Trophy },
     { label: "Member Since", value: "2024", icon: Star }
   ];
 
@@ -68,31 +50,37 @@ const Dashboard = () => {
     return "Good evening";
   };
 
+  const handleServiceClick = (link: string, status: string) => {
+    if (status === "Active") {
+      navigate(link);
+    }
+  };
+
   return (
     <div className={`min-h-screen ${theme === "dark" ? "bg-gray-950" : "bg-gray-50"}`}>
-      {/* Animated Background Elements */}
+      {/* Animated Background */}
       <div className="fixed inset-0 overflow-hidden pointer-events-none">
         <div className="absolute top-20 left-20 w-72 h-72 bg-purple-500 rounded-full mix-blend-multiply filter blur-3xl opacity-10 animate-blob"></div>
-        <div className="absolute top-40 right-20 w-72 h-72 bg-pink-500 rounded-full mix-blend-multiply filter blur-3xl opacity-10 animate-blob animation-delay-2000"></div>
-        <div className="absolute bottom-20 left-1/2 w-72 h-72 bg-blue-500 rounded-full mix-blend-multiply filter blur-3xl opacity-10 animate-blob animation-delay-4000"></div>
+        <div className="absolute top-40 right-20 w-72 h-72 bg-orange-500 rounded-full mix-blend-multiply filter blur-3xl opacity-10 animate-blob animation-delay-2000"></div>
+        <div className="absolute bottom-20 left-1/2 w-72 h-72 bg-pink-500 rounded-full mix-blend-multiply filter blur-3xl opacity-10 animate-blob animation-delay-4000"></div>
       </div>
 
       <div className="relative p-6 md:p-8 max-w-7xl mx-auto">
         {/* Welcome Section */}
-        <div className="mb-12 text-center md:text-left">
+        <div className="mb-12 text-center">
           <h1 className={`text-4xl md:text-5xl font-bold mb-2 ${
             theme === "dark" ? "text-white" : "text-gray-900"
           }`}>
             {getGreeting()}, {user?.displayName || "Developer"}!
           </h1>
           <p className={`text-lg ${theme === "dark" ? "text-gray-400" : "text-gray-600"}`}>
-            Welcome to your unified development hub
+            Welcome to Gondola Bros Hub
           </p>
         </div>
 
-        {/* Stats Grid */}
+        {/* Quick Stats */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-12">
-          {stats.map((stat, index) => (
+          {quickStats.map((stat, index) => (
             <div
               key={index}
               className={`relative overflow-hidden rounded-2xl p-6 backdrop-blur-xl ${
@@ -118,16 +106,19 @@ const Dashboard = () => {
           ))}
         </div>
 
-        {/* Services Grid */}
+        {/* Main Services */}
         <div className="mb-8">
           <h2 className={`text-2xl font-bold mb-6 ${theme === "dark" ? "text-white" : "text-gray-900"}`}>
-            Your Services
+            Our Services
           </h2>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             {services.map((service) => (
               <div
                 key={service.id}
-                className={`group relative overflow-hidden rounded-3xl backdrop-blur-xl transition-all duration-300 hover:scale-[1.02] cursor-pointer ${
+                onClick={() => handleServiceClick(service.link, service.status)}
+                className={`group relative overflow-hidden rounded-3xl backdrop-blur-xl transition-all duration-300 hover:scale-[1.02] ${
+                  service.status === "Active" ? "cursor-pointer" : "cursor-not-allowed"
+                } ${
                   theme === "dark" 
                     ? "bg-white/5 border border-white/10 hover:border-white/20" 
                     : "bg-white/70 border border-gray-200 hover:border-gray-300"
@@ -146,8 +137,6 @@ const Dashboard = () => {
                     <span className={`px-3 py-1 rounded-full text-xs font-medium ${
                       service.status === "Active" 
                         ? "bg-green-500/20 text-green-400 border border-green-500/30"
-                        : service.status === "Beta"
-                        ? "bg-blue-500/20 text-blue-400 border border-blue-500/30"
                         : "bg-gray-500/20 text-gray-400 border border-gray-500/30"
                     }`}>
                       {service.status}
@@ -176,13 +165,13 @@ const Dashboard = () => {
 
                   {/* Action Button */}
                   <button className={`w-full py-3 px-6 rounded-xl font-medium transition-all flex items-center justify-center gap-2 group-hover:gap-3 ${
-                    service.status === "Active" || service.status === "Beta"
+                    service.status === "Active"
                       ? `bg-gradient-to-r ${service.gradient} text-white shadow-lg hover:shadow-xl`
                       : theme === "dark"
                       ? "bg-gray-800 text-gray-400"
                       : "bg-gray-200 text-gray-600"
                   }`}>
-                    <span>{service.status === "Coming Soon" ? "Notify Me" : "Open"}</span>
+                    <span>{service.status === "Coming Soon" ? "Notify Me" : "Enter"}</span>
                     <ArrowRight size={18} className="transition-transform group-hover:translate-x-1" />
                   </button>
                 </div>
@@ -195,32 +184,57 @@ const Dashboard = () => {
         </div>
 
         {/* Quick Actions */}
-        <div className={`rounded-3xl p-8 backdrop-blur-xl ${
-          theme === "dark" 
-            ? "bg-gradient-to-br from-purple-500/10 to-pink-500/10 border border-white/10" 
-            : "bg-gradient-to-br from-purple-50 to-pink-50 border border-purple-200"
-        }`}>
-          <div className="flex flex-col md:flex-row items-center justify-between gap-6">
-            <div>
-              <h3 className={`text-xl font-bold mb-2 ${theme === "dark" ? "text-white" : "text-gray-900"}`}>
-                Ready to build something amazing?
-              </h3>
-              <p className={theme === "dark" ? "text-gray-400" : "text-gray-600"}>
-                Explore our tools and start creating today
-              </p>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          {/* Token Balance Card */}
+          <div className={`relative overflow-hidden rounded-3xl backdrop-blur-xl p-8 ${
+            theme === "dark" 
+              ? "bg-gradient-to-br from-yellow-500/10 to-orange-500/10 border border-yellow-500/20" 
+              : "bg-gradient-to-br from-yellow-50 to-orange-50 border border-yellow-200"
+          }`}>
+            <div className="flex items-center justify-between">
+              <div>
+                <div className="flex items-center gap-3 mb-2">
+                  <Coin size={24} className="text-yellow-500" />
+                  <h3 className={`text-xl font-bold ${theme === "dark" ? "text-white" : "text-gray-900"}`}>
+                    Token Balance
+                  </h3>
+                </div>
+                <p className={`text-3xl font-bold mb-4 ${theme === "dark" ? "text-white" : "text-gray-900"}`}>
+                  2,000
+                </p>
+                <button 
+                  onClick={() => navigate("/store")}
+                  className="px-6 py-2 bg-gradient-to-r from-yellow-500 to-orange-500 text-white rounded-lg font-medium hover:shadow-lg transition-all"
+                >
+                  Manage Tokens
+                </button>
+              </div>
+              <div className="absolute -right-8 -bottom-8 w-32 h-32 bg-yellow-500/20 rounded-full blur-2xl" />
             </div>
-            <div className="flex gap-4">
-              <button className="px-6 py-3 bg-gradient-to-r from-purple-500 to-pink-500 text-white rounded-xl font-medium hover:shadow-lg transition-all flex items-center gap-2">
-                <Rocket size={20} />
-                <span>Start Project</span>
-              </button>
-              <button className={`px-6 py-3 rounded-xl font-medium transition-all ${
-                theme === "dark" 
-                  ? "bg-white/10 text-white hover:bg-white/20" 
-                  : "bg-white text-gray-900 hover:bg-gray-100"
-              }`}>
-                Learn More
-              </button>
+          </div>
+
+          {/* Community Card */}
+          <div className={`relative overflow-hidden rounded-3xl backdrop-blur-xl p-8 ${
+            theme === "dark" 
+              ? "bg-gradient-to-br from-purple-500/10 to-pink-500/10 border border-purple-500/20" 
+              : "bg-gradient-to-br from-purple-50 to-pink-50 border border-purple-200"
+          }`}>
+            <div className="flex items-center justify-between">
+              <div>
+                <div className="flex items-center gap-3 mb-2">
+                  <Rocket size={24} className="text-purple-500" />
+                  <h3 className={`text-xl font-bold ${theme === "dark" ? "text-white" : "text-gray-900"}`}>
+                    Join Community
+                  </h3>
+                </div>
+                <p className={`mb-4 ${theme === "dark" ? "text-gray-400" : "text-gray-600"}`}>
+                  Connect with other creators
+                </p>
+                <button className="px-6 py-2 bg-gradient-to-r from-purple-500 to-pink-500 text-white rounded-lg font-medium hover:shadow-lg transition-all">
+                  Discord Server
+                </button>
+              </div>
+              <div className="absolute -right-8 -bottom-8 w-32 h-32 bg-purple-500/20 rounded-full blur-2xl" />
             </div>
           </div>
         </div>

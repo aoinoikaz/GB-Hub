@@ -163,7 +163,6 @@ const MediaDashboard = () => {
   const navigate = useNavigate();
   const [isLinked, setIsLinked] = useState(false);
   const [username, setUsername] = useState<string>("Not set");
-  const [subscriptionStatus, setSubscriptionStatus] = useState<string>("Inactive");
   const [currentPlan, setCurrentPlan] = useState<string | null>(null);
   const [activeSubscription, setActiveSubscription] = useState<any>(null);
   const [tokenBalance, setTokenBalance] = useState<number>(0);
@@ -192,11 +191,9 @@ const MediaDashboard = () => {
       if (result.data.hasActiveSubscription && result.data.subscription) {
         setActiveSubscription(result.data.subscription);
         setCurrentPlan(result.data.subscription.planId);
-        setSubscriptionStatus("active");
       } else {
         setActiveSubscription(null);
         setCurrentPlan(null);
-        setSubscriptionStatus("inactive");
       }
     } catch (err) {
       console.error("Error checking subscription status:", err);
@@ -249,12 +246,10 @@ const MediaDashboard = () => {
           } else {
             setIsLinked(false);
             setUsername(user.displayName || "Not set");
-            setSubscriptionStatus("Inactive");
           }
         } else {
           setIsLinked(false);
           setUsername(user.displayName || "Not set");
-          setSubscriptionStatus("Inactive");
         }
       } catch (err) {
         console.error("🔥 Error fetching Firestore data:", err);

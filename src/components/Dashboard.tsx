@@ -7,7 +7,7 @@ import { collection, getDocs, doc, getDoc } from "firebase/firestore";
 import { db } from "../config/firebase";
 import { 
   GameController, PlayCircle, Coin, Rocket, 
-  Lightning, Users, Star, Trophy,
+  Lightning, Users, Star,
   ArrowRight, Sparkle
 } from "phosphor-react";
 
@@ -44,10 +44,14 @@ const Dashboard = () => {
     }
   ];
 
-  const quickStats = [
+  const quickStats: Array<{
+    label: string;
+    value: string;
+    icon: any;
+    link?: string;
+  }> = [
     { label: "Active Services", value: activeServices.toString(), icon: Lightning },
-    { label: "Community Members", value: memberCount > 999 ? `${(memberCount/1000).toFixed(1)}K` : memberCount.toString(), icon: Users },
-    { label: "Projects Built", value: "47", icon: Trophy },
+    { label: "Platform Members", value: memberCount > 999 ? `${(memberCount/1000).toFixed(1)}K` : memberCount.toString(), icon: Users },
     { label: "Member Since", value: userSince, icon: Star }
   ];
 
@@ -68,10 +72,19 @@ const Dashboard = () => {
             setUserSince(createdDate.getFullYear().toString());
           }
           
-          // Count active services
+          // Count active services based on active subscriptions
           let services = 0;
-          if (userData.services?.emby?.linked) services++;
-          // Add more services as they become available
+          
+          // Check if user has active media subscription
+          const userSubsQuery = await getDocs(collection(db, "subscriptions"));
+          const hasActiveMediaSub = userSubsQuery.docs.some(doc => {
+            const data = doc.data();
+            return data.userId === user.uid && data.status === "active";
+          });
+          
+          if (hasActiveMediaSub) services++; // Media service is active
+          // Add more services as they become available (games, dev tools, etc.)
+          
           setActiveServices(services);
         }
 
@@ -126,14 +139,17 @@ const Dashboard = () => {
 
         {/* Quick Stats */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-12">
-          {quickStats.map((stat, index) => (
+          {quickStats.slice(0, 3).map((stat, index) => (
             <div
               key={index}
+              onClick={() => stat.link && window.open(stat.link, '_blank')}
               className={`relative overflow-hidden rounded-2xl p-6 backdrop-blur-xl ${
                 theme === "dark" 
                   ? "bg-white/5 border border-white/10" 
                   : "bg-white/70 border border-gray-200"
-              } ${loading ? "animate-pulse" : ""}`}
+              } ${loading ? "animate-pulse" : ""} ${
+                stat.link ? "cursor-pointer hover:scale-[1.02] transition-transform" : ""
+              }`}
             >
               <div className="absolute top-0 right-0 w-20 h-20 bg-gradient-to-br from-purple-500/20 to-transparent rounded-full blur-2xl" />
               <div className="relative">
@@ -150,6 +166,31 @@ const Dashboard = () => {
               </div>
             </div>
           ))}
+          
+          {/* Status Badge Card */}
+          <div
+            onClick={() => window.open('https://status.gondolabros.com/', '_blank')}
+            className={`relative overflow-hidden rounded-2xl p-6 backdrop-blur-xl cursor-pointer hover:scale-[1.02] transition-transform ${
+              theme === "dark" 
+                ? "bg-white/5 border border-white/10" 
+                : "bg-white/70 border border-gray-200"
+            }`}
+          >
+            <div className="absolute top-0 right-0 w-20 h-20 bg-gradient-to-br from-green-500/20 to-transparent rounded-full blur-2xl" />
+            <div className="relative flex flex-col items-center justify-center h-full">
+              <iframe 
+                src={`https://status.gondolabros.com/badge?theme=${theme}`}
+                width="200" 
+                height="30" 
+                frameBorder="0" 
+                scrolling="no"
+                className="mb-2"
+              />
+              <p className={`text-sm ${theme === "dark" ? "text-gray-400" : "text-gray-600"}`}>
+                System Status
+              </p>
+            </div>
+          </div>
         </div>
 
         {/* Main Services */}

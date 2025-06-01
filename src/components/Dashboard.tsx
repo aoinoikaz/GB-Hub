@@ -1,4 +1,4 @@
-// src/components/Dashboard.tsx - Complete Fixed Version
+// src/components/Dashboard.tsx - Final Complete Version
 import { useState, useEffect } from "react";
 import { useTheme } from "../context/theme-context";
 import { useAuth } from "../context/auth-context";
@@ -7,7 +7,7 @@ import { collection, getDocs, doc, getDoc, query, where } from "firebase/firesto
 import { db } from "../config/firebase";
 import { 
   GameController, PlayCircle, Coin, Rocket, 
-  Lightning, Users, Star, Trophy,
+  Users, Star, Heart, ShoppingCart,
   ArrowRight, Sparkle, Spinner
 } from "phosphor-react";
 
@@ -16,10 +16,10 @@ const Dashboard = () => {
   const { user, loading: authLoading } = useAuth();
   const navigate = useNavigate();
   const [tokenBalance, setTokenBalance] = useState<number>(0);
+  const [totalTokensPurchased, setTotalTokensPurchased] = useState<number>(0);
   const [memberCount, setMemberCount] = useState<number>(0);
-  const [activeServices, setActiveServices] = useState<number>(0);
-  const [userSince, setUserSince] = useState<string>("2024");
-  const [totalTokensTraded, setTotalTokensTraded] = useState<number>(0);
+  const [totalTips, setTotalTips] = useState<number>(0);
+  const [memberSince, setMemberSince] = useState<string>("New Member");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -50,18 +50,39 @@ const Dashboard = () => {
     label: string;
     value: string;
     icon: any;
-    link?: string;
   }> = [
-    { label: "Active Services", value: activeServices.toString(), icon: Lightning },
-    { label: "Platform Members", value: memberCount > 999 ? `${(memberCount/1000).toFixed(1)}K` : memberCount.toString(), icon: Users },
-    { label: "Tokens Traded", value: totalTokensTraded > 999 ? `${(totalTokensTraded/1000).toFixed(1)}K` : totalTokensTraded.toString(), icon: Trophy },
-    { label: "Member Since", value: userSince, icon: Star }
+    { 
+      label: "Member Since", 
+      value: memberSince, 
+      icon: Star 
+    },
+    { 
+      label: "Tokens Purchased", 
+      value: totalTokensPurchased.toLocaleString(), 
+      icon: ShoppingCart 
+    },
+    { 
+      label: "Platform Members", 
+      value: memberCount.toString(), 
+      icon: Users 
+    },
+    { 
+      label: "Tips Given", 
+      value: `$${totalTips}`, 
+      icon: Heart
+    }
   ];
 
   useEffect(() => {
     let mounted = true;
+    let isRunning = false;
 
     const fetchData = async () => {
+      if (isRunning) {
+        console.log("[Dashboard] Already fetching, skipping duplicate call");
+        return;
+      }
+      
       if (authLoading) {
         console.log("[Dashboard] Auth still loading, waiting...");
         return;
@@ -75,108 +96,134 @@ const Dashboard = () => {
         return;
       }
 
-      try {
-        console.log("[Dashboard] Fetching data for user:", user.uid);
+      isRunning = true;
 
-        // Fetch user's token balance
+      try {
+        console.log("[Dashboard] Starting fetch for user:", user.uid);
+        
+        // Small delay to let React settle
+        await new Promise(resolve => setTimeout(resolve, 100));
+        
+        if (!mounted) {
+          console.log("[Dashboard] Component unmounted, aborting");
+          return;
+        }
+
+        // Fetch user's data
         try {
+          console.log("[Dashboard] Getting user document...");
           const userDocRef = doc(db, "users", user.uid);
-          console.log("[Dashboard] About to fetch user doc...");
           const userDoc = await getDoc(userDocRef);
-          console.log("[Dashboard] User doc fetched, exists:", userDoc.exists());
           
           if (!mounted) return;
-
+          
+          console.log("[Dashboard] User doc exists:", userDoc.exists());
+          
           if (userDoc.exists()) {
             const userData = userDoc.data();
-            console.log("[Dashboard] User data found, tokenBalance:", userData.tokenBalance);
+            console.log("[Dashboard] User data:", userData);
+            
+            // Set current token balance
             setTokenBalance(userData.tokenBalance || 0);
             
+            // Set member since date with better formatting
             if (userData.createdAt) {
               const createdDate = userData.createdAt.toDate();
-              setUserSince(createdDate.getFullYear().toString());
+              const monthYear = createdDate.toLocaleDateString('en-US', { 
+                month: 'short', 
+                year: 'numeric' 
+              });
+              setMemberSince(monthYear); // e.g., "Jan 2025" instead of just "2025"
             }
           } else {
             console.warn("[Dashboard] User document doesn't exist!");
-            setError("User profile not found. Some features may be limited.");
+            if (mounted) {
+              setError("User profile not found. Some features may be limited.");
+            }
           }
         } catch (userError: any) {
-          console.error("[Dashboard] Error fetching user doc:", userError.message);
-          if (userError.code === 'permission-denied') {
-            setError("Permission denied. Please try logging out and back in.");
-          } else {
+          console.error("[Dashboard] Error fetching user doc:", userError);
+          if (mounted) {
             setError(`Failed to load user data: ${userError.message}`);
           }
         }
 
-        // Check subscriptions
+        // Only continue if still mounted
+        if (!mounted) return;
+
+        // Get user's total token purchases
         try {
-          console.log("[Dashboard] Checking subscriptions...");
-          const subsQuery = query(
-            collection(db, "subscriptions"),
-            where("userId", "==", user.uid),
-            where("status", "==", "active")
+          console.log("[Dashboard] Getting user's token purchases...");
+          const purchasesSnapshot = await getDocs(
+            query(
+              collection(db, "tokenPurchases"), 
+              where("userId", "==", user.uid),
+              where("status", "==", "completed")
+            )
           );
           
-          const userSubsSnapshot = await getDocs(subsQuery);
-          console.log("[Dashboard] Subscriptions found:", userSubsSnapshot.size);
+          let totalPurchased = 0;
+          purchasesSnapshot.forEach(doc => {
+            const purchase = doc.data();
+            totalPurchased += (purchase.tokens || 0);
+          });
           
-          if (!mounted) return;
-          setActiveServices(userSubsSnapshot.empty ? 0 : 1);
-        } catch (subError: any) {
-          console.error("[Dashboard] Subscription error:", subError.message);
-          setActiveServices(0);
-          // Don't set error for subscription issues - not critical
+          console.log("[Dashboard] Total tokens purchased:", totalPurchased);
+          setTotalTokensPurchased(totalPurchased);
+          
+        } catch (purchaseError: any) {
+          console.error("[Dashboard] Error getting token purchases:", purchaseError);
+          setTotalTokensPurchased(0);
         }
+
+        // Only continue if still mounted
+        if (!mounted) return;
 
         // Get platform stats
         try {
-          console.log("[Dashboard] Checking stats...");
-          const statsDoc = await getDoc(doc(db, "stats", "platform"));
+          console.log("[Dashboard] Getting platform stats...");
           
-          if (statsDoc.exists() && mounted) {
-            const stats = statsDoc.data();
-            console.log("[Dashboard] Stats found:", stats);
-            setMemberCount(stats.totalUsers || 150);
-            setTotalTokensTraded(stats.totalTrades || 5000);
-          } else {
-            console.log("[Dashboard] No stats doc, using defaults");
-            if (mounted) {
-              setMemberCount(150);
-              setTotalTokensTraded(5000);
-            }
-          }
+          // Total Platform Members
+          const usersSnapshot = await getDocs(collection(db, "users"));
+          const totalUsers = usersSnapshot.size;
+          console.log("[Dashboard] Total users:", totalUsers);
+          setMemberCount(totalUsers);
+          
+          // Total Tips Given
+          const tipsSnapshot = await getDocs(
+            query(collection(db, "tips"), where("status", "==", "completed"))
+          );
+          let tipsTotal = 0;
+          tipsSnapshot.forEach(doc => {
+            const tip = doc.data();
+            tipsTotal += parseFloat(tip.amount || "0");
+          });
+          console.log("[Dashboard] Total tips:", tipsTotal);
+          setTotalTips(Math.round(tipsTotal));
+          
         } catch (statsError: any) {
-          console.error("[Dashboard] Stats error:", statsError.message);
+          console.error("[Dashboard] Error getting platform stats:", statsError);
           if (mounted) {
-            setMemberCount(150);
-            setTotalTokensTraded(5000);
+            setMemberCount(0);
+            setTotalTips(0);
           }
-          // Don't set error for stats - not critical
         }
 
       } catch (error: any) {
-        console.error("[Dashboard] Fatal error:", error.message);
+        console.error("[Dashboard] Fatal error:", error);
         
         if (mounted) {
           setTokenBalance(0);
-          setActiveServices(0);
-          setMemberCount(150);
-          setTotalTokensTraded(5000);
-          
-          // Set user-visible error
-          if (error.code === 'unavailable') {
-            setError("Firebase is temporarily unavailable. Please try again later.");
-          } else if (error.code === 'permission-denied') {
-            setError("Access denied. Please try logging out and back in.");
-          } else {
-            setError(`Dashboard failed to load: ${error.message}`);
-          }
+          setTotalTokensPurchased(0);
+          setMemberCount(0);
+          setTotalTips(0);
+          setError(`Dashboard error: ${error.message}`);
         }
       } finally {
         if (mounted) {
           console.log("[Dashboard] Loading complete");
           setLoading(false);
+          isRunning = false;
         }
       }
     };
@@ -184,6 +231,7 @@ const Dashboard = () => {
     fetchData();
 
     return () => {
+      console.log("[Dashboard] Cleanup - unmounting");
       mounted = false;
     };
   }, [user, authLoading]);

@@ -1,3 +1,5 @@
+// src/components/Layout.tsx - FIXED VERSION
+
 import { useState, useEffect } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useTheme } from "../context/theme-context";
@@ -7,8 +9,9 @@ import {
   GameController, Coin, X, List, User
 } from "phosphor-react";
 import { getFirestore, doc, getDoc } from "firebase/firestore";
-import { signOut } from "firebase/auth";
-import { auth } from "../config/firebase";
+// Remove auth import - we'll use context instead!
+// import { signOut } from "firebase/auth";
+// import { auth } from "../config/firebase";
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -16,7 +19,7 @@ interface LayoutProps {
 
 const Layout = ({ children }: LayoutProps) => {
   const { theme } = useTheme();
-  const { user: authUser } = useAuth();
+  const { user: authUser, logout } = useAuth(); // Get logout from context!
   const location = useLocation();
   const navigate = useNavigate();
   const [profileImage, setProfileImage] = useState<string | null>(null);
@@ -30,6 +33,12 @@ const Layout = ({ children }: LayoutProps) => {
     { icon: Coin, label: "Store", path: "/store", id: "store" },
     { icon: Gear, label: "Settings", path: "/settings", id: "settings" },
   ];
+
+  useEffect(() => {
+    const handleResize = () => setIsMobileMenuOpen(false);
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
 
   useEffect(() => {
     const fetchProfileImage = async () => {
@@ -47,10 +56,10 @@ const Layout = ({ children }: LayoutProps) => {
     fetchProfileImage();
   }, [authUser, firestore]);
 
+  // FIXED: Use logout from context instead of direct signOut
   const handleLogout = async () => {
     try {
-      await signOut(auth);
-      navigate("/auth");
+      await logout(); // This already handles navigation!
     } catch (error) {
       console.error("Logout failed:", error);
     }

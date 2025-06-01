@@ -1,23 +1,18 @@
-// src/pages/AuthAction.tsx
-
 import { useEffect, useState } from "react";
 import {
-  getAuth,
   applyActionCode,
   confirmPasswordReset,
   verifyPasswordResetCode,
   signInWithEmailAndPassword,
 } from "firebase/auth";
-import { getFunctions, httpsCallable } from "firebase/functions";
-import { getFirestore, doc, getDoc } from "firebase/firestore";
+import { httpsCallable } from "firebase/functions";
+import { doc, getDoc } from "firebase/firestore";
 import { Spinner } from "phosphor-react";
 import PasswordPolicyInput from "../PasswordPolicyInput";
 import { useNavigate } from "react-router-dom";
+import { auth, db, functions } from "../../config/firebase";
 
 const AuthAction = () => {
-  const auth = getAuth();
-  const functions = getFunctions();
-  const db = getFirestore();
   const navigate = useNavigate();
   const [message, setMessage] = useState("Processing...");
   const [mode, setMode] = useState<string | null>(null);

@@ -1777,51 +1777,6 @@ exports.checkSubscriptionStatus = onCall<CheckSubscriptionStatusData, Promise<Ch
   }
 );
 
-exports.cancelScheduledDowngrade = onCall(async (request) => {
-  const { userId } = request.data;
-  const auth = request.auth;
-
-  if (!auth || auth.uid !== userId) {
-    throw new HttpsError("unauthenticated", "User must be authenticated.");
-  }
-
-  try {
-    const activeSubQuery = admin
-      .firestore()
-      .collection("subscriptions")
-      .where("userId", "==", userId)
-      .where("status", "==", "active")
-      .limit(1);
-    
-    const snapshot = await activeSubQuery.get();
-    
-    if (snapshot.empty) {
-      throw new HttpsError("not-found", "No active subscription found.");
-    }
-
-    const subDoc = snapshot.docs[0];
-    const subData = subDoc.data();
-    
-    if (!subData.scheduledDowngrade) {
-      throw new HttpsError("not-found", "No scheduled downgrade found.");
-    }
-
-    await subDoc.ref.update({
-      scheduledDowngrade: admin.firestore.FieldValue.delete(),
-      autoRenew: false,
-    });
-
-    return { 
-      success: true, 
-      message: "Scheduled downgrade cancelled successfully." 
-    };
-  } catch (error: any) {
-    console.error("Error cancelling downgrade:", error);
-    if (error instanceof HttpsError) throw error;
-    throw new HttpsError("internal", "Failed to cancel scheduled downgrade.");
-  }
-});
-
 exports.checkUsername = onCall<CheckUsernameData>(async (request) => {
   const { username } = request.data;
   if (!username || typeof username !== "string") {

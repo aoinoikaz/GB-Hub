@@ -35,7 +35,6 @@ $functions = @(
     "activateEmbyAccount",
     "uploadProfileImage",
     "checkUsername"
-    "cancelScheduledDowngrade"
 )
 
 # Common deployment parameters

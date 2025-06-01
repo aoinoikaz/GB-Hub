@@ -28,7 +28,8 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       console.log("[AuthContext] Auth state changed:", firebaseUser?.uid || "null");
       
       if (firebaseUser) {
-        // Just set the user, keep it simple
+        // Don't block unverified users here - let components handle it
+        // This prevents issues during the verification flow
         const authUser: AuthUser = Object.create(firebaseUser);
         authUser.role = "user";
         setUser(authUser);
@@ -77,12 +78,11 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     }
   };
 
-  // Better loading screen instead of ugly centered spinner
+  // Better loading screen
   if (loading) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-gray-900 via-purple-900/20 to-gray-900 flex items-center justify-center">
         <div className="text-center">
-          {/* Animated Logo */}
           <div className="mb-8 relative">
             <div className="w-24 h-24 mx-auto relative">
               <div className="absolute inset-0 bg-gradient-to-r from-purple-500 to-pink-500 rounded-full animate-pulse"></div>
@@ -95,7 +95,6 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
             </div>
           </div>
           
-          {/* Loading animation */}
           <div className="flex justify-center gap-1 mb-4">
             <div className="w-2 h-2 bg-purple-500 rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></div>
             <div className="w-2 h-2 bg-purple-500 rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></div>

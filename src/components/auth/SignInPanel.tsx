@@ -27,36 +27,53 @@ const SignInPanel = ({ onSwap, onForgot, setCurrentPanel }: { onSwap: () => void
     };
     checkFirstLogin();
   }, [user, setCurrentPanel, password]);
+// In handleSignIn function, improve the email verification flow:
 
-  const handleSignIn = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setError("");
-    setLoading(true); // Set loading to true at the start of the operation
+const handleSignIn = async (e: React.FormEvent) => {
+  e.preventDefault();
+  setError("");
+  setLoading(true);
 
-    try {
-      const userCredential = await signInWithEmailAndPassword(auth, email, password);
-      const firebaseUser = userCredential.user;
+  try {
+    const userCredential = await signInWithEmailAndPassword(auth, email, password);
+    const firebaseUser = userCredential.user;
 
-      if (!firebaseUser.emailVerified) {
-        setError("Please verify your email before logging in.");
-        await logout();
-        return;
-      }
-
-      const userDocRef = doc(db, "users", firebaseUser.uid);
-      const userDoc = await getDoc(userDocRef);
-      if (!userDoc.exists() && firebaseUser.displayName === "New User") {
-        console.log("Sign-in success, switching to setup with password:", password);
-        setCurrentPanel("setup", password);
-      } else {
-        navigate("/dashboard");
-      }
-    } catch (err: any) {
-      setError(err.message);
-    } finally {
-      setLoading(false); // Set loading to false when the operation completes (success or failure)
+    // Check email verification
+    if (!firebaseUser.emailVerified) {
+      setError("Please verify your email before logging in. Check your inbox for the verification link.");
+      await logout(); // Use logout from context to ensure clean state
+      setLoading(false);
+      return;
     }
-  };
+
+    // Check if this is first login (needs setup)
+    const userDocRef = doc(db, "users", firebaseUser.uid);
+    const userDoc = await getDoc(userDocRef);
+    
+    if (!userDoc.exists() && firebaseUser.displayName === "New User") {
+      console.log("First login detected, switching to setup");
+      setCurrentPanel("setup", password);
+    } else {
+      // Normal login flow
+      navigate("/dashboard");
+    }
+  } catch (err: any) {
+    // Better error messages
+    if (err.code === 'auth/user-not-found') {
+      setError("No account found with this email.");
+    } else if (err.code === 'auth/wrong-password') {
+      setError("Incorrect password.");
+    } else if (err.code === 'auth/invalid-email') {
+      setError("Invalid email address.");
+    } else if (err.code === 'auth/too-many-requests') {
+      setError("Too many failed attempts. Please try again later.");
+    } else {
+      setError(err.message);
+    }
+  } finally {
+    setLoading(false);
+  }
+};
 
   return (
     <>

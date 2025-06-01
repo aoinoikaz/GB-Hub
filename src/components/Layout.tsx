@@ -117,6 +117,25 @@ const Layout = ({ children }: LayoutProps) => {
           </ul>
         </nav>
 
+        {/* Status Badge - ADD THIS SECTION */}
+        <div className="mb-4">
+          <a 
+            href="https://status.gondolabros.com/badge?theme=dark"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="block"
+          >
+            <iframe
+              src="https://status.gondolabros.com/badge?theme=dark"
+              width="100%"
+              height="30"
+              className="w-full rounded-lg"
+              style={{ colorScheme: 'normal' }}
+              title="System Status"
+            />
+          </a>
+        </div>
+
         {/* User Section */}
         <div className="p-4 border-t border-white/10">
           <div className="flex items-center gap-3 mb-4">

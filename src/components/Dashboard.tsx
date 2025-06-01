@@ -67,7 +67,7 @@ const Dashboard = () => {
       icon: Users 
     },
     { 
-      label: "Tips Given", 
+      label: "Tip Jar", 
       value: `$${totalTips}`, 
       icon: Heart
     }

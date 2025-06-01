@@ -438,16 +438,20 @@ const MediaDashboard = () => {
               <strong>Username:</strong> {username}
             </p>
             <p className="text-lg font-semibold">
-              <strong>Status:</strong> {isCancelled ? (
-                <span className="text-yellow-400">Subscription Cancelled</span>
-              ) : (
-                subscriptionStatus
-              )}
+              <strong>Status:</strong> {
+                isCancelled ? (
+                  <span className="text-yellow-400">Subscription Cancelled</span>
+                ) : activeSubscription ? (
+                  <span className="text-green-400">Active</span>
+                ) : (
+                  <span className="text-gray-400">Inactive</span>
+                )
+              }
             </p>
             {currentPlan && (
               <p className="text-lg font-semibold">
                 <strong>Current Plan:</strong> {subscriptionPlans.find(p => p.id === currentPlan)?.name || currentPlan}
-                {isCancelled && <span className="text-yellow-400 text-sm ml-2">(Cancelled)</span>}
+                {isCancelled && <span className="text-yellow-400 text-sm ml-2">(Ending {new Date(activeSubscription.endDate).toLocaleDateString()})</span>}
               </p>
             )}
 
@@ -657,90 +661,119 @@ const MediaDashboard = () => {
 
               {/* Plans Grid */}
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {subscriptionPlans.map((plan) => (
-                  <div
-                    key={plan.id}
-                    className={`relative p-4 border-2 rounded-lg cursor-pointer transition ${
-                      selectedPlan === plan.id
-                        ? `border-${plan.color}-500 bg-gray-800/50`
-                        : "border-gray-700 hover:border-gray-600"
-                    } ${currentPlan === plan.id ? "ring-2 ring-green-500" : ""}`}
-                    onClick={() => setSelectedPlan(plan.id)}
-                  >
-                    {plan.popular && (
-                      <div className="absolute -top-3 left-1/2 transform -translate-x-1/2 bg-purple-500 text-white px-3 py-1 rounded-full text-xs">
-                        Most Popular
-                      </div>
-                    )}
-                    {currentPlan === plan.id && (
-                      <div className="absolute -top-3 right-4 bg-green-500 text-white px-3 py-1 rounded-full text-xs">
-                        Current Plan
-                      </div>
-                    )}
-                    
-                    <div className={`flex items-center mb-3 text-${plan.color}-400`}>
-                      {plan.icon}
-                      <h3 className="text-xl font-semibold ml-2">{plan.name}</h3>
-                    </div>
-                    
-                    <p className="text-2xl font-bold mb-1">
-                      {billingPeriod === "monthly" ? plan.monthlyTokens : plan.yearlyTokens} tokens
-                    </p>
-                    <p className="text-sm text-gray-400 mb-4">
-                      per {billingPeriod === "monthly" ? "month" : "year"}
-                      {billingPeriod === "yearly" && (
-                        <span className="text-green-400 ml-1">
-                          (save {plan.monthlyTokens * 12 - plan.yearlyTokens} tokens)
-                        </span>
+                {subscriptionPlans.map((plan) => {
+                  // Determine if this plan is selectable
+                  const currentPlanIndex = currentPlan ? subscriptionPlans.findIndex(p => p.id === currentPlan) : -1;
+                  const thisPlanIndex = subscriptionPlans.findIndex(p => p.id === plan.id);
+                  const isLowerTier = currentPlan && thisPlanIndex < currentPlanIndex;
+                  const isCurrentPlan = currentPlan === plan.id;
+                  const isSelectable = !isCurrentPlan && !isLowerTier;
+
+                  return (
+                    <div
+                      key={plan.id}
+                      className={`relative p-4 border-2 rounded-lg transition ${
+                        selectedPlan === plan.id
+                          ? `border-${plan.color}-500 bg-gray-800/50`
+                          : isLowerTier
+                          ? "border-gray-700 opacity-50 cursor-not-allowed"
+                          : "border-gray-700 hover:border-gray-600 cursor-pointer"
+                      } ${currentPlan === plan.id ? "ring-2 ring-green-500" : ""}`}
+                      onClick={() => {
+                        if (isSelectable && !isLowerTier) {
+                          setSelectedPlan(plan.id);
+                        }
+                      }}
+                    >
+                      {plan.popular && (
+                        <div className="absolute -top-3 left-1/2 transform -translate-x-1/2 bg-purple-500 text-white px-3 py-1 rounded-full text-xs">
+                          Most Popular
+                        </div>
                       )}
-                    </p>
-                    
-                    <ul className="text-sm space-y-2">
-                      <li className="flex items-center">
-                        <Check size={16} className="text-green-400 mr-2" />
-                        Full library access
-                      </li>
-                      <li className="flex items-center">
-                        <Check size={16} className="text-green-400 mr-2" />
-                        {plan.features.streams} stream{plan.features.streams !== 1 ? "s" : ""}
-                      </li>
-                      <li className="flex items-center">
-                        {plan.features.downloads ? (
+                      {currentPlan === plan.id && (
+                        <div className="absolute -top-3 right-4 bg-green-500 text-white px-3 py-1 rounded-full text-xs">
+                          Current Plan
+                        </div>
+                      )}
+                      {isLowerTier && (
+                        <div className="absolute -top-3 right-4 bg-gray-600 text-gray-300 px-3 py-1 rounded-full text-xs">
+                          Lower Tier
+                        </div>
+                      )}
+                      
+                      <div className={`flex items-center mb-3 text-${plan.color}-400`}>
+                        {plan.icon}
+                        <h3 className="text-xl font-semibold ml-2">{plan.name}</h3>
+                      </div>
+                      
+                      <p className="text-2xl font-bold mb-1">
+                        {billingPeriod === "monthly" ? plan.monthlyTokens : plan.yearlyTokens} tokens
+                      </p>
+                      <p className="text-sm text-gray-400 mb-4">
+                        per {billingPeriod === "monthly" ? "month" : "year"}
+                        {billingPeriod === "yearly" && (
+                          <span className="text-green-400 ml-1">
+                            (save {plan.monthlyTokens * 12 - plan.yearlyTokens} tokens)
+                          </span>
+                        )}
+                      </p>
+                      
+                      <ul className="text-sm space-y-2">
+                        <li className="flex items-center">
                           <Check size={16} className="text-green-400 mr-2" />
-                        ) : (
-                          <X size={16} className="text-red-400 mr-2" />
-                        )}
-                        Downloads
-                      </li>
-                      <li className="flex items-center">
-                        <FilmSlate size={16} className="mr-2 text-gray-400" />
-                        {plan.features.movieRequests === 0
-                          ? "No movie requests"
-                          : `${plan.features.movieRequests} movie request${plan.features.movieRequests > 1 ? "s" : ""}/month`}
-                      </li>
-                      <li className="flex items-center">
-                        <Television size={16} className="mr-2 text-gray-400" />
-                        {plan.features.tvRequests === 0
-                          ? "No TV requests"
-                          : `${plan.features.tvRequests} TV show${plan.features.tvRequests > 1 ? "s" : ""}/month`}
-                      </li>
-                      <li className="flex items-center">
-                        {plan.features.support === "priority" ? (
-                          <Star size={16} className="text-yellow-400 mr-2" />
-                        ) : (
-                          <Info size={16} className="text-gray-400 mr-2" />
-                        )}
-                        {plan.features.support === "priority" ? "Priority" : "Regular"} support
-                      </li>
-                    </ul>
-                  </div>
-                ))}
+                          Full library access
+                        </li>
+                        <li className="flex items-center">
+                          <Check size={16} className="text-green-400 mr-2" />
+                          {plan.features.streams} stream{plan.features.streams !== 1 ? "s" : ""}
+                        </li>
+                        <li className="flex items-center">
+                          {plan.features.downloads ? (
+                            <Check size={16} className="text-green-400 mr-2" />
+                          ) : (
+                            <X size={16} className="text-red-400 mr-2" />
+                          )}
+                          Downloads
+                        </li>
+                        <li className="flex items-center">
+                          <FilmSlate size={16} className="mr-2 text-gray-400" />
+                          {plan.features.movieRequests === 0
+                            ? "No movie requests"
+                            : `${plan.features.movieRequests} movie request${plan.features.movieRequests > 1 ? "s" : ""}/month`}
+                        </li>
+                        <li className="flex items-center">
+                          <Television size={16} className="mr-2 text-gray-400" />
+                          {plan.features.tvRequests === 0
+                            ? "No TV requests"
+                            : `${plan.features.tvRequests} TV show${plan.features.tvRequests > 1 ? "s" : ""}/month`}
+                        </li>
+                        <li className="flex items-center">
+                          {plan.features.support === "priority" ? (
+                            <Star size={16} className="text-yellow-400 mr-2" />
+                          ) : (
+                            <Info size={16} className="text-gray-400 mr-2" />
+                          )}
+                          {plan.features.support === "priority" ? "Priority" : "Regular"} support
+                        </li>
+                      </ul>
+                    </div>
+                  );
+                })}
               </div>
             </div>
           )}
 
           {/* Redemption Section */}
-          {selectedPlan && !isCancelled && (
+          {selectedPlan && !isCancelled && (() => {
+          const currentPlanIndex = currentPlan ? subscriptionPlans.findIndex(p => p.id === currentPlan) : -1;
+          const selectedPlanIndex = subscriptionPlans.findIndex(p => p.id === selectedPlan);
+          const isUpgrade = currentPlan && selectedPlanIndex > currentPlanIndex;
+          const isNewSubscription = !currentPlan;
+          
+          // Only show completion panel for new subscriptions or upgrades
+          if (!isNewSubscription && !isUpgrade) return null;
+          
+          return (
             <div className="mb-6 p-4 bg-gray-800 rounded-lg">
               <h3 className="text-xl font-semibold mb-4">Complete Your Subscription</h3>
               
@@ -768,7 +801,10 @@ const MediaDashboard = () => {
                     <div>
                       <p className="font-medium text-white">Auto-Renewal</p>
                       <p className="text-sm text-gray-400">
-                        Automatically renew when your subscription ends
+                        {autoRenewEnabled 
+                          ? "Your subscription will automatically renew each period"
+                          : "Your subscription will expire at the end of the billing period"
+                        }
                       </p>
                     </div>
                     <button
@@ -784,11 +820,6 @@ const MediaDashboard = () => {
                       />
                     </button>
                   </div>
-                  {!autoRenewEnabled && (
-                    <p className="text-xs text-yellow-400 mt-2">
-                      Your subscription will end on the expiry date. You can re-enable auto-renewal anytime.
-                    </p>
-                  )}
                 </div>
               )}
               
@@ -805,9 +836,9 @@ const MediaDashboard = () => {
               <div className="flex gap-4">
                 <button
                   onClick={handleRedeemSubscription}
-                  disabled={redeeming || tokenBalance < finalCost || (activeSubscription && selectedPlan === currentPlan)}
+                  disabled={redeeming || tokenBalance < finalCost}
                   className={`flex-1 py-2 px-4 rounded-md font-semibold transition ${
-                    redeeming || tokenBalance < finalCost || (activeSubscription && selectedPlan === currentPlan)
+                    redeeming || tokenBalance < finalCost
                       ? "bg-gray-600 cursor-not-allowed opacity-50"
                       : "bg-gradient-to-r from-purple-500 to-pink-500 hover:opacity-90"
                   } text-white`}
@@ -816,8 +847,6 @@ const MediaDashboard = () => {
                     <Spinner size={20} className="animate-spin mx-auto" />
                   ) : tokenBalance < finalCost ? (
                     "Insufficient Tokens"
-                  ) : activeSubscription && selectedPlan === currentPlan ? (
-                    "Already Subscribed"
                   ) : activeSubscription ? (
                     "Upgrade Now"
                   ) : (
@@ -835,7 +864,8 @@ const MediaDashboard = () => {
                 )}
               </div>
             </div>
-          )}
+          );
+        })()}
         </>
       )}
     </div>

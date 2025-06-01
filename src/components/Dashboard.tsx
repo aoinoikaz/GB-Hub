@@ -1,7 +1,10 @@
 // src/components/Dashboard.tsx - Clean Modern Dashboard
+import { useState, useEffect } from "react";
 import { useTheme } from "../context/theme-context";
 import { useAuth } from "../context/auth-context";
 import { useNavigate } from "react-router-dom";
+import { collection, getDocs, doc, getDoc } from "firebase/firestore";
+import { db } from "../config/firebase";
 import { 
   GameController, PlayCircle, Coin, Rocket, 
   Lightning, Users, Star, Trophy,
@@ -12,6 +15,11 @@ const Dashboard = () => {
   const { theme } = useTheme();
   const { user } = useAuth();
   const navigate = useNavigate();
+  const [tokenBalance, setTokenBalance] = useState<number>(0);
+  const [memberCount, setMemberCount] = useState<number>(0);
+  const [activeServices, setActiveServices] = useState<number>(0);
+  const [userSince, setUserSince] = useState<string>("2024");
+  const [loading, setLoading] = useState(true);
 
   const services = [
     {
@@ -37,11 +45,49 @@ const Dashboard = () => {
   ];
 
   const quickStats = [
-    { label: "Active Services", value: "2", icon: Lightning },
-    { label: "Community Members", value: "1.2K", icon: Users },
+    { label: "Active Services", value: activeServices.toString(), icon: Lightning },
+    { label: "Community Members", value: memberCount > 999 ? `${(memberCount/1000).toFixed(1)}K` : memberCount.toString(), icon: Users },
     { label: "Projects Built", value: "47", icon: Trophy },
-    { label: "Member Since", value: "2024", icon: Star }
+    { label: "Member Since", value: userSince, icon: Star }
   ];
+
+  useEffect(() => {
+    const fetchData = async () => {
+      if (!user) return;
+
+      try {
+        // Fetch user's token balance
+        const userDoc = await getDoc(doc(db, "users", user.uid));
+        if (userDoc.exists()) {
+          const userData = userDoc.data();
+          setTokenBalance(userData.tokenBalance || 0);
+          
+          // Get user creation date
+          if (userData.createdAt) {
+            const createdDate = userData.createdAt.toDate();
+            setUserSince(createdDate.getFullYear().toString());
+          }
+          
+          // Count active services
+          let services = 0;
+          if (userData.services?.emby?.linked) services++;
+          // Add more services as they become available
+          setActiveServices(services);
+        }
+
+        // Count total members
+        const usersSnapshot = await getDocs(collection(db, "users"));
+        setMemberCount(usersSnapshot.size);
+
+      } catch (error) {
+        console.error("Error fetching dashboard data:", error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchData();
+  }, [user]);
 
   const getGreeting = () => {
     const hour = new Date().getHours();
@@ -87,7 +133,7 @@ const Dashboard = () => {
                 theme === "dark" 
                   ? "bg-white/5 border border-white/10" 
                   : "bg-white/70 border border-gray-200"
-              }`}
+              } ${loading ? "animate-pulse" : ""}`}
             >
               <div className="absolute top-0 right-0 w-20 h-20 bg-gradient-to-br from-purple-500/20 to-transparent rounded-full blur-2xl" />
               <div className="relative">
@@ -96,7 +142,7 @@ const Dashboard = () => {
                   <Sparkle size={16} className="text-yellow-400" />
                 </div>
                 <p className={`text-2xl font-bold ${theme === "dark" ? "text-white" : "text-gray-900"}`}>
-                  {stat.value}
+                  {loading ? "..." : stat.value}
                 </p>
                 <p className={`text-sm ${theme === "dark" ? "text-gray-400" : "text-gray-600"}`}>
                   {stat.label}
@@ -200,7 +246,7 @@ const Dashboard = () => {
                   </h3>
                 </div>
                 <p className={`text-3xl font-bold mb-4 ${theme === "dark" ? "text-white" : "text-gray-900"}`}>
-                  2,000
+                  {loading ? "..." : tokenBalance.toLocaleString()}
                 </p>
                 <button 
                   onClick={() => navigate("/store")}

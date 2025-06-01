@@ -13,7 +13,7 @@ import {
 
 const Dashboard = () => {
   const { theme } = useTheme();
-  const { user } = useAuth();
+  const { user, loading: authLoading } = useAuth();
   const navigate = useNavigate();
   const [tokenBalance, setTokenBalance] = useState<number>(0);
   const [memberCount, setMemberCount] = useState<number>(0);
@@ -59,9 +59,16 @@ const Dashboard = () => {
 
   useEffect(() => {
     const fetchData = async () => {
-      if (!user) return;
+      // Wait for auth to be ready and user to exist
+      if (!user || !user.uid) {
+        console.log("Waiting for auth...");
+        return;
+      }
 
       try {
+        // Add a small delay to ensure auth token is ready
+        await new Promise(resolve => setTimeout(resolve, 100));
+        
         // Fetch user's token balance
         const userDoc = await getDoc(doc(db, "users", user.uid));
         if (userDoc.exists()) {
@@ -90,20 +97,19 @@ const Dashboard = () => {
           setActiveServices(services);
         }
 
-        // Count total members
-        const usersSnapshot = await getDocs(collection(db, "users"));
-        setMemberCount(usersSnapshot.size);
-        
-        // Count tokens traded (only user's own trades)
-        const tradesSnapshot = await getDocs(collection(db, "trades"));
-        let totalTraded = 0;
-        tradesSnapshot.forEach(doc => {
-          const trade = doc.data();
-          if (trade.senderId === user.uid || trade.receiverId === user.uid) {
-            totalTraded += trade.tokens || 0;
+        // Get platform stats from public document
+        try {
+          const statsDoc = await getDoc(doc(db, "stats", "platform"));
+          if (statsDoc.exists()) {
+            const stats = statsDoc.data();
+            setMemberCount(stats.totalUsers || 0);
+            setTotalTokensTraded(stats.totalTrades || 0);
           }
-        });
-        setTotalTokensTraded(totalTraded);
+        } catch (error) {
+          // Fallback to counting (if permissions allow)
+          const usersSnapshot = await getDocs(collection(db, "users"));
+          setMemberCount(usersSnapshot.size);
+        }
 
       } catch (error) {
         console.error("Error fetching dashboard data:", error);
@@ -113,7 +119,7 @@ const Dashboard = () => {
     };
 
     fetchData();
-  }, [user]);
+  }, [user, user?.uid]); // Add user.uid to dependencies
 
   const getGreeting = () => {
     const hour = new Date().getHours();
@@ -127,6 +133,17 @@ const Dashboard = () => {
       navigate(link);
     }
   };
+
+  // Don't fetch if auth is still loading
+  if (authLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-center">
+          <p className="text-gray-400">Loading...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className={`min-h-screen ${theme === "dark" ? "bg-gray-950" : "bg-gray-50"}`}>

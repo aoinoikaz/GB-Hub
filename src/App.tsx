@@ -24,7 +24,12 @@ const App = () => {
       <Route element={<ProtectedRoute />}>
         <Route element={<Layout><Dashboard /></Layout>} path="/dashboard" />
         <Route element={<Layout><MediaDashboard /></Layout>} path="/media" />
-        <Route element={<Layout><Store /></Layout>} path="/store" />
+
+
+        {/*  To this (temporarily) */}
+        <Route element={<Store />} path="/store" />
+
+
         <Route element={<Layout><Settings /></Layout>} path="/settings" />
         <Route element={<Layout><Leaderboard /></Layout>} path="/leaderboard" />
         

@@ -1,12 +1,14 @@
+// src/components/MediaDashboard.tsx - Complete updated component
+
 import { useState, useEffect } from "react";
 import { doc, getDoc } from "firebase/firestore";
 import { db } from "../config/firebase";
 import { useAuth } from "../context/auth-context";
-import { Info, Spinner, Download, FilmSlate, Television, Users, Crown, Star, Check, X, Rocket, Lightning } from "phosphor-react";
+import { Info, Spinner, Download, FilmSlate, Television, Users, Crown, Star, Check, X, Rocket, Lightning, Warning } from "phosphor-react";
 import { getFunctions, httpsCallable } from "firebase/functions";
 import { useNavigate } from "react-router-dom";
 
-// Interfaces for the cloud function responses
+// Interfaces
 interface ProcessSubscriptionResponse {
   success: boolean;
   subscriptionId: string;
@@ -24,13 +26,11 @@ interface CheckSubscriptionStatusResponse {
     status: string;
     autoRenew: boolean;
     daysRemaining: number;
-    // Monthly request tracking
     movieRequestsUsed?: number;
     tvRequestsUsed?: number;
     lastResetDate?: string;
   };
 }
-
 
 interface SubscriptionPlan {
   id: string;
@@ -99,10 +99,10 @@ const subscriptionPlans: SubscriptionPlan[] = [
   {
     id: "ultimate",
     name: "Ultimate",
-    monthlyTokens: 250,  // Adjusted from 300
-    yearlyTokens: 2500,  // Adjusted from 3000
+    monthlyTokens: 250,
+    yearlyTokens: 2500,
     features: {
-      streams: 10,  // Changed from "unlimited" to 10
+      streams: 10,
       downloads: true,
       movieRequests: 10,
       tvRequests: 5,
@@ -149,7 +149,7 @@ const boosterPacks = [
     id: "ultra-booster",
     name: "Ultra Pack",
     tokens: 300,
-    description: "+20 movies & +10 TV shows this month",  // Changed from "Unlimited"
+    description: "+20 movies & +10 TV shows this month",
     icon: <Lightning size={20} />,
     color: "yellow",
     type: "mega",
@@ -174,6 +174,8 @@ const MediaDashboard = () => {
   const [redeeming, setRedeeming] = useState(false);
   const [showBoosterPacks, setShowBoosterPacks] = useState(false);
   const [purchasingBooster, setPurchasingBooster] = useState<string | null>(null);
+  const [autoRenewEnabled, setAutoRenewEnabled] = useState(true);
+  const [togglingAutoRenew, setTogglingAutoRenew] = useState(false);
   const functions = getFunctions();
 
   // Check subscription status
@@ -198,6 +200,32 @@ const MediaDashboard = () => {
       }
     } catch (err) {
       console.error("Error checking subscription status:", err);
+    }
+  };
+
+  // Toggle auto-renewal
+  const handleToggleAutoRenew = async () => {
+    if (!user || !activeSubscription) return;
+    
+    setTogglingAutoRenew(true);
+    setError(null);
+
+    try {
+      const toggleAutoRenew = httpsCallable(functions, "toggleAutoRenew");
+      const result = await toggleAutoRenew({
+        userId: user.uid,
+        autoRenew: !activeSubscription.autoRenew,
+      });
+
+      if (result.data) {
+        // Refresh subscription status
+        await checkSubscriptionStatus();
+      }
+    } catch (err: any) {
+      setError(err.message || "Failed to update subscription");
+      console.error("Toggle auto-renew error:", err);
+    } finally {
+      setTogglingAutoRenew(false);
     }
   };
 
@@ -238,10 +266,9 @@ const MediaDashboard = () => {
 
     fetchUserData();
   }, [user, authLoading]);
-  
 
   const calculateTokenCost = () => {
-  if (!selectedPlan) return 0;
+    if (!selectedPlan) return 0;
     const plan = subscriptionPlans.find((p) => p.id === selectedPlan);
     if (!plan) return 0;
     
@@ -307,8 +334,7 @@ const MediaDashboard = () => {
         planId: selectedPlan,
         billingPeriod,
         duration: 1,
-        isUpgrade: currentPlan && selectedPlan !== currentPlan,
-        proRateCredit: currentPlan && selectedPlan !== currentPlan ? proRateCredit : 0,
+        autoRenew: !activeSubscription ? autoRenewEnabled : activeSubscription.autoRenew,
       });
 
       if (result.data.success) {
@@ -322,6 +348,7 @@ const MediaDashboard = () => {
         await checkSubscriptionStatus();
         
         setSelectedPlan(null);
+        setAutoRenewEnabled(true); // Reset for next time
       }
       
     } catch (err: any) {
@@ -392,6 +419,8 @@ const MediaDashboard = () => {
     ? Math.max(0, tokenCost - proRateCredit) 
     : tokenCost;
 
+  const isCancelled = activeSubscription && !activeSubscription.autoRenew;
+
   return (
     <div className="p-6 bg-gray-900 text-white rounded-lg">
       <div className="mb-6">
@@ -409,45 +438,82 @@ const MediaDashboard = () => {
               <strong>Username:</strong> {username}
             </p>
             <p className="text-lg font-semibold">
-              <strong>Status:</strong> {subscriptionStatus}
+              <strong>Status:</strong> {isCancelled ? (
+                <span className="text-yellow-400">Subscription Cancelled</span>
+              ) : (
+                subscriptionStatus
+              )}
             </p>
             {currentPlan && (
               <p className="text-lg font-semibold">
                 <strong>Current Plan:</strong> {subscriptionPlans.find(p => p.id === currentPlan)?.name || currentPlan}
+                {isCancelled && <span className="text-yellow-400 text-sm ml-2">(Cancelled)</span>}
               </p>
             )}
 
-
             {activeSubscription && (
-            <>
-              <p className="text-sm text-gray-400 mt-2">
-                {activeSubscription.daysRemaining} days remaining • Expires {new Date(activeSubscription.endDate).toLocaleDateString()}
-              </p>
-              
-              {/* Show scheduled downgrade info */}
-              {activeSubscription.scheduledDowngrade && (
-                <div className="mt-3 p-3 bg-yellow-900/20 border border-yellow-600/30 rounded-md">
-                  <p className="text-sm text-yellow-400">
-                    <Lightning size={16} className="inline mr-1" />
-                    Scheduled downgrade to {subscriptionPlans.find(p => p.id === activeSubscription.scheduledDowngrade?.planId)?.name} plan
-                    on {new Date(activeSubscription.scheduledDowngrade.scheduledFor).toLocaleDateString()}
-                  </p>
-                  <button
-                    onClick={async () => {
-                      try {
-                        const cancelDowngrade = httpsCallable(functions, "cancelScheduledDowngrade");
-                        await cancelDowngrade({ userId: user!.uid });
-                        await checkSubscriptionStatus();
-                      } catch (err) {
-                        setError("Failed to cancel downgrade");
-                      }
-                    }}
-                    className="text-xs text-yellow-300 hover:text-yellow-200 underline mt-1"
-                  >
-                    Cancel downgrade
-                  </button>
+              <>
+                <p className="text-sm text-gray-400 mt-2">
+                  {activeSubscription.daysRemaining} days remaining • {isCancelled ? "Access ends" : "Expires"} {new Date(activeSubscription.endDate).toLocaleDateString()}
+                </p>
+                
+                {/* Auto-Renew / Cancel Section */}
+                <div className="mt-3 p-3 bg-gray-700 rounded-md">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="font-medium text-white flex items-center gap-2">
+                        {activeSubscription.autoRenew ? (
+                          <>
+                            <Check size={16} className="text-green-400" />
+                            Auto-Renewal Active
+                          </>
+                        ) : (
+                          <>
+                            <X size={16} className="text-yellow-400" />
+                            Subscription Ending
+                          </>
+                        )}
+                      </p>
+                      <p className="text-sm text-gray-400">
+                        {activeSubscription.autoRenew 
+                          ? `Renews on ${new Date(activeSubscription.endDate).toLocaleDateString()}`
+                          : `Access until ${new Date(activeSubscription.endDate).toLocaleDateString()}`
+                        }
+                      </p>
+                    </div>
+                    <button
+                      onClick={handleToggleAutoRenew}
+                      disabled={togglingAutoRenew}
+                      className={`px-3 py-1.5 rounded-md text-sm font-medium transition ${
+                        activeSubscription.autoRenew
+                          ? "bg-red-600/20 text-red-400 hover:bg-red-600/30 border border-red-600/30"
+                          : "bg-green-600/20 text-green-400 hover:bg-green-600/30 border border-green-600/30"
+                      } ${togglingAutoRenew ? "opacity-50 cursor-not-allowed" : ""}`}
+                    >
+                      {togglingAutoRenew ? (
+                        <Spinner size={16} className="animate-spin" />
+                      ) : activeSubscription.autoRenew ? (
+                        "Cancel"
+                      ) : (
+                        "Resume"
+                      )}
+                    </button>
+                  </div>
                 </div>
-              )}
+
+                {/* Show warning when cancelled */}
+                {!activeSubscription.autoRenew && (
+                  <div className="mt-3 p-3 bg-yellow-900/20 border border-yellow-600/30 rounded-md">
+                    <p className="text-sm text-yellow-400 flex items-start gap-2">
+                      <Warning size={16} className="mt-0.5 flex-shrink-0" />
+                      <span>
+                        Your subscription has been cancelled. You'll have access until {new Date(activeSubscription.endDate).toLocaleDateString()}, 
+                        after which your media access will be disabled. You can resume your subscription anytime before it expires.
+                      </span>
+                    </p>
+                  </div>
+                )}
+                
                 {/* Request Usage */}
                 {currentPlan && currentPlan !== "basic" && (
                   <div className="mt-3 flex gap-4">
@@ -468,8 +534,8 @@ const MediaDashboard = () => {
                   </div>
                 )}
                 
-                {/* Booster Packs Button */}
-                {currentPlan && (  // Removed the check for !== "ultimate"
+                {/* Booster Packs Button - Hide when cancelled */}
+                {currentPlan && !isCancelled && (
                   <button
                     onClick={() => setShowBoosterPacks(!showBoosterPacks)}
                     className="mt-3 text-sm bg-gradient-to-r from-orange-500 to-red-500 px-3 py-1 rounded-md hover:opacity-90 transition flex items-center gap-2"
@@ -509,8 +575,8 @@ const MediaDashboard = () => {
         </div>
       ) : (
         <>
-          {/* Booster Packs Section */}
-          {showBoosterPacks && activeSubscription && (
+          {/* Booster Packs Section - Hide when cancelled */}
+          {showBoosterPacks && activeSubscription && !isCancelled && (
             <div className="mb-6 p-4 bg-gray-800 rounded-lg">
               <h3 className="text-xl font-semibold mb-4 flex items-center">
                 <Lightning size={24} className="mr-2 text-yellow-400" />
@@ -556,123 +622,125 @@ const MediaDashboard = () => {
             </div>
           )}
 
-          {/* Subscription Plans */}
-          <div className="mb-6">
-            <h2 className="text-2xl font-bold mb-4">
-              {activeSubscription ? "Upgrade Your Plan" : "Choose Your Plan"}
-            </h2>
-            
-            {/* Billing Period Toggle */}
-            <div className="flex justify-center mb-6">
-              <div className="bg-gray-800 rounded-lg p-1 flex">
-                <button
-                  onClick={() => setBillingPeriod("monthly")}
-                  className={`px-4 py-2 rounded-md transition ${
-                    billingPeriod === "monthly"
-                      ? "bg-purple-500 text-white"
-                      : "text-gray-400 hover:text-white"
-                  }`}
-                >
-                  Monthly
-                </button>
-                <button
-                  onClick={() => setBillingPeriod("yearly")}
-                  className={`px-4 py-2 rounded-md transition ${
-                    billingPeriod === "yearly"
-                      ? "bg-purple-500 text-white"
-                      : "text-gray-400 hover:text-white"
-                  }`}
-                >
-                  Yearly (Save up to 20%)
-                </button>
+          {/* Subscription Plans - Hide when cancelled */}
+          {!isCancelled && (
+            <div className="mb-6">
+              <h2 className="text-2xl font-bold mb-4">
+                {activeSubscription ? "Upgrade Your Plan" : "Choose Your Plan"}
+              </h2>
+              
+              {/* Billing Period Toggle */}
+              <div className="flex justify-center mb-6">
+                <div className="bg-gray-800 rounded-lg p-1 flex">
+                  <button
+                    onClick={() => setBillingPeriod("monthly")}
+                    className={`px-4 py-2 rounded-md transition ${
+                      billingPeriod === "monthly"
+                        ? "bg-purple-500 text-white"
+                        : "text-gray-400 hover:text-white"
+                    }`}
+                  >
+                    Monthly
+                  </button>
+                  <button
+                    onClick={() => setBillingPeriod("yearly")}
+                    className={`px-4 py-2 rounded-md transition ${
+                      billingPeriod === "yearly"
+                        ? "bg-purple-500 text-white"
+                        : "text-gray-400 hover:text-white"
+                    }`}
+                  >
+                    Yearly (Save up to 20%)
+                  </button>
+                </div>
+              </div>
+
+              {/* Plans Grid */}
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {subscriptionPlans.map((plan) => (
+                  <div
+                    key={plan.id}
+                    className={`relative p-4 border-2 rounded-lg cursor-pointer transition ${
+                      selectedPlan === plan.id
+                        ? `border-${plan.color}-500 bg-gray-800/50`
+                        : "border-gray-700 hover:border-gray-600"
+                    } ${currentPlan === plan.id ? "ring-2 ring-green-500" : ""}`}
+                    onClick={() => setSelectedPlan(plan.id)}
+                  >
+                    {plan.popular && (
+                      <div className="absolute -top-3 left-1/2 transform -translate-x-1/2 bg-purple-500 text-white px-3 py-1 rounded-full text-xs">
+                        Most Popular
+                      </div>
+                    )}
+                    {currentPlan === plan.id && (
+                      <div className="absolute -top-3 right-4 bg-green-500 text-white px-3 py-1 rounded-full text-xs">
+                        Current Plan
+                      </div>
+                    )}
+                    
+                    <div className={`flex items-center mb-3 text-${plan.color}-400`}>
+                      {plan.icon}
+                      <h3 className="text-xl font-semibold ml-2">{plan.name}</h3>
+                    </div>
+                    
+                    <p className="text-2xl font-bold mb-1">
+                      {billingPeriod === "monthly" ? plan.monthlyTokens : plan.yearlyTokens} tokens
+                    </p>
+                    <p className="text-sm text-gray-400 mb-4">
+                      per {billingPeriod === "monthly" ? "month" : "year"}
+                      {billingPeriod === "yearly" && (
+                        <span className="text-green-400 ml-1">
+                          (save {plan.monthlyTokens * 12 - plan.yearlyTokens} tokens)
+                        </span>
+                      )}
+                    </p>
+                    
+                    <ul className="text-sm space-y-2">
+                      <li className="flex items-center">
+                        <Check size={16} className="text-green-400 mr-2" />
+                        Full library access
+                      </li>
+                      <li className="flex items-center">
+                        <Check size={16} className="text-green-400 mr-2" />
+                        {plan.features.streams} stream{plan.features.streams !== 1 ? "s" : ""}
+                      </li>
+                      <li className="flex items-center">
+                        {plan.features.downloads ? (
+                          <Check size={16} className="text-green-400 mr-2" />
+                        ) : (
+                          <X size={16} className="text-red-400 mr-2" />
+                        )}
+                        Downloads
+                      </li>
+                      <li className="flex items-center">
+                        <FilmSlate size={16} className="mr-2 text-gray-400" />
+                        {plan.features.movieRequests === 0
+                          ? "No movie requests"
+                          : `${plan.features.movieRequests} movie request${plan.features.movieRequests > 1 ? "s" : ""}/month`}
+                      </li>
+                      <li className="flex items-center">
+                        <Television size={16} className="mr-2 text-gray-400" />
+                        {plan.features.tvRequests === 0
+                          ? "No TV requests"
+                          : `${plan.features.tvRequests} TV show${plan.features.tvRequests > 1 ? "s" : ""}/month`}
+                      </li>
+                      <li className="flex items-center">
+                        {plan.features.support === "priority" ? (
+                          <Star size={16} className="text-yellow-400 mr-2" />
+                        ) : (
+                          <Info size={16} className="text-gray-400 mr-2" />
+                        )}
+                        {plan.features.support === "priority" ? "Priority" : "Regular"} support
+                      </li>
+                    </ul>
+                  </div>
+                ))}
               </div>
             </div>
-
-            {/* Plans Grid */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {subscriptionPlans.map((plan) => (
-                <div
-                  key={plan.id}
-                  className={`relative p-4 border-2 rounded-lg cursor-pointer transition ${
-                    selectedPlan === plan.id
-                      ? `border-${plan.color}-500 bg-gray-800/50`
-                      : "border-gray-700 hover:border-gray-600"
-                  } ${currentPlan === plan.id ? "ring-2 ring-green-500" : ""}`}
-                  onClick={() => setSelectedPlan(plan.id)}
-                >
-                  {plan.popular && (
-                    <div className="absolute -top-3 left-1/2 transform -translate-x-1/2 bg-purple-500 text-white px-3 py-1 rounded-full text-xs">
-                      Most Popular
-                    </div>
-                  )}
-                  {currentPlan === plan.id && (
-                    <div className="absolute -top-3 right-4 bg-green-500 text-white px-3 py-1 rounded-full text-xs">
-                      Current Plan
-                    </div>
-                  )}
-                  
-                  <div className={`flex items-center mb-3 text-${plan.color}-400`}>
-                    {plan.icon}
-                    <h3 className="text-xl font-semibold ml-2">{plan.name}</h3>
-                  </div>
-                  
-                  <p className="text-2xl font-bold mb-1">
-                    {billingPeriod === "monthly" ? plan.monthlyTokens : plan.yearlyTokens} tokens
-                  </p>
-                  <p className="text-sm text-gray-400 mb-4">
-                    per {billingPeriod === "monthly" ? "month" : "year"}
-                    {billingPeriod === "yearly" && (
-                      <span className="text-green-400 ml-1">
-                        (save {plan.monthlyTokens * 12 - plan.yearlyTokens} tokens)
-                      </span>
-                    )}
-                  </p>
-                  
-                  <ul className="text-sm space-y-2">
-                    <li className="flex items-center">
-                      <Check size={16} className="text-green-400 mr-2" />
-                      Full library access
-                    </li>
-                    <li className="flex items-center">
-                      <Check size={16} className="text-green-400 mr-2" />
-                      {plan.features.streams} stream{plan.features.streams !== 1 ? "s" : ""}
-                    </li>
-                    <li className="flex items-center">
-                      {plan.features.downloads ? (
-                        <Check size={16} className="text-green-400 mr-2" />
-                      ) : (
-                        <X size={16} className="text-red-400 mr-2" />
-                      )}
-                      Downloads
-                    </li>
-                    <li className="flex items-center">
-                      <FilmSlate size={16} className="mr-2 text-gray-400" />
-                      {plan.features.movieRequests === 0
-                        ? "No movie requests"
-                        : `${plan.features.movieRequests} movie request${plan.features.movieRequests > 1 ? "s" : ""}/month`}
-                    </li>
-                    <li className="flex items-center">
-                      <Television size={16} className="mr-2 text-gray-400" />
-                      {plan.features.tvRequests === 0
-                        ? "No TV requests"
-                        : `${plan.features.tvRequests} TV show${plan.features.tvRequests > 1 ? "s" : ""}/month`}
-                    </li>
-                    <li className="flex items-center">
-                      {plan.features.support === "priority" ? (
-                        <Star size={16} className="text-yellow-400 mr-2" />
-                      ) : (
-                        <Info size={16} className="text-gray-400 mr-2" />
-                      )}
-                      {plan.features.support === "priority" ? "Priority" : "Regular"} support
-                    </li>
-                  </ul>
-                </div>
-              ))}
-            </div>
-          </div>
+          )}
 
           {/* Redemption Section */}
-          {selectedPlan && (
+          {selectedPlan && !isCancelled && (
             <div className="mb-6 p-4 bg-gray-800 rounded-lg">
               <h3 className="text-xl font-semibold mb-4">Complete Your Subscription</h3>
               
@@ -693,22 +761,43 @@ const MediaDashboard = () => {
                 )}
               </div>
               
+              {/* Auto-Renew Toggle for NEW subscriptions */}
+              {!activeSubscription && (
+                <div className="mb-4 p-3 bg-gray-700 rounded-md">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="font-medium text-white">Auto-Renewal</p>
+                      <p className="text-sm text-gray-400">
+                        Automatically renew when your subscription ends
+                      </p>
+                    </div>
+                    <button
+                      onClick={() => setAutoRenewEnabled(!autoRenewEnabled)}
+                      className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                        autoRenewEnabled ? 'bg-purple-500' : 'bg-gray-600'
+                      }`}
+                    >
+                      <span
+                        className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                          autoRenewEnabled ? 'translate-x-6' : 'translate-x-1'
+                        }`}
+                      />
+                    </button>
+                  </div>
+                  {!autoRenewEnabled && (
+                    <p className="text-xs text-yellow-400 mt-2">
+                      Your subscription will end on the expiry date. You can re-enable auto-renewal anytime.
+                    </p>
+                  )}
+                </div>
+              )}
+              
               {/* Show pro-rate info for plan changes */}
               {currentPlan && selectedPlan !== currentPlan && (
                 <div className="mb-4 p-3 bg-gray-700 rounded-md">
                   <p className="text-sm text-gray-300">
-                    {subscriptionPlans.findIndex(p => p.id === selectedPlan) > 
-                     subscriptionPlans.findIndex(p => p.id === currentPlan) ? (
-                      <>
-                        <span className="text-green-400 font-semibold">Upgrade Benefits:</span> Immediate access to new features. 
-                        Pro-rated credit of {proRateCredit} tokens applied from your current plan.
-                      </>
-                    ) : (
-                      <>
-                        <span className="text-yellow-400 font-semibold">Downgrade Notice:</span> Features will be adjusted at the end of your current billing period.
-                        No immediate changes to your current plan.
-                      </>
-                    )}
+                    <span className="text-green-400 font-semibold">Upgrade Benefits:</span> Immediate access to new features. 
+                    Pro-rated credit of {proRateCredit} tokens applied from your current plan.
                   </p>
                 </div>
               )}
@@ -730,8 +819,7 @@ const MediaDashboard = () => {
                   ) : activeSubscription && selectedPlan === currentPlan ? (
                     "Already Subscribed"
                   ) : activeSubscription ? (
-                    subscriptionPlans.findIndex(p => p.id === selectedPlan) > 
-                    subscriptionPlans.findIndex(p => p.id === currentPlan) ? "Upgrade Now" : "Schedule Downgrade"
+                    "Upgrade Now"
                   ) : (
                     "Subscribe Now"
                   )}

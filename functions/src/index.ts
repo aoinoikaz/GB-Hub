@@ -139,7 +139,6 @@ interface ProcessTipResponse {
   orderId: string;
 }
 
-
 interface ProcessSubscriptionData {
   userId: string;
   planId: string;

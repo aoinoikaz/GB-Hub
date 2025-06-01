@@ -1,5 +1,3 @@
-// src/components/SignUpPanel.tsx
-
 import { useState } from "react";
 import { createUserWithEmailAndPassword, updateProfile, sendEmailVerification } from "firebase/auth";
 import { auth } from "../../config/firebase";

@@ -1,8 +1,9 @@
+// src/config/firebase.ts
 import { initializeApp } from "firebase/app";
-import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, sendPasswordResetEmail } from "firebase/auth";
+import { getAuth } from "firebase/auth";
 import { getFirestore } from "firebase/firestore";
 import { getAnalytics } from "firebase/analytics";
-import { getFunctions } from "firebase/functions"; // Add this import
+import { getFunctions } from "firebase/functions";
 
 const firebaseConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
@@ -14,23 +15,14 @@ const firebaseConfig = {
   measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID,
 };
 
+// Initialize Firebase ONCE
 const app = initializeApp(firebaseConfig);
 
-const auth = getAuth(app);
-const db = getFirestore(app);
-const analytics = getAnalytics(app);
-const functions = getFunctions(app); // Initialize Firebase Functions
+// Get service instances
+export const auth = getAuth(app);
+export const db = getFirestore(app);
+export const analytics = getAnalytics(app);
+export const functions = getFunctions(app);
 
-export const signIn = async (email: string, password: string) => {
-  return signInWithEmailAndPassword(auth, email, password);
-};
-
-export const signUp = async (email: string, password: string) => {
-  return createUserWithEmailAndPassword(auth, email, password);
-};
-
-export const resetPassword = async (email: string) => {
-  return sendPasswordResetEmail(auth, email);
-};
-
-export { app, auth, db, analytics, functions }; // Export functions
+// Don't export helper functions - let components use Firebase SDK directly
+export { app };

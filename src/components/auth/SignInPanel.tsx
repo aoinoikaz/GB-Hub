@@ -4,7 +4,7 @@ import { auth, db } from "../../config/firebase";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../../context/auth-context";
 import { doc, getDoc } from "firebase/firestore";
-import { Spinner } from "phosphor-react"; // Import Spinner from phosphor-react
+import { Spinner } from "phosphor-react";
 
 const SignInPanel = ({ onSwap, onForgot, setCurrentPanel }: { onSwap: () => void; onForgot: () => void; setCurrentPanel: (panel: "signin" | "signup" | "forgot" | "setup", password?: string) => void }) => {
   const [email, setEmail] = useState("");

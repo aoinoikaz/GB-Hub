@@ -1,4 +1,4 @@
-// src/App.tsx
+// src/App.tsx - Fixed route structure
 import { Routes, Route } from "react-router-dom";
 import Home from "./Home";
 import Auth from "./components/auth/Auth";
@@ -26,8 +26,10 @@ const App = () => {
         <Route element={<Layout><MediaDashboard /></Layout>} path="/media" />
         <Route element={<Layout><Store /></Layout>} path="/store" />
         <Route element={<Layout><Settings /></Layout>} path="/settings" />
+        <Route element={<Layout><Leaderboard /></Layout>} path="/leaderboard" />
+        
+        {/* Tips doesn't use Layout (it's a special page) */}
         <Route element={<Tips />} path="/tipjar" />
-        <Route element={<Leaderboard />} path="/leaderboard" />
         
         {/* Future Routes */}
         <Route element={<Layout><div className="p-8 text-center"><h1 className="text-3xl font-bold">Games Coming Soon!</h1></div></Layout>} path="/games" />

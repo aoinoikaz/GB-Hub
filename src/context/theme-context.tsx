@@ -8,7 +8,6 @@ interface ThemeContextType {
 
 const ThemeContext = createContext<ThemeContextType | undefined>(undefined);
 
-// Safe localStorage helper
 const getStoredTheme = (): "light" | "dark" => {
   if (typeof window === 'undefined') return "dark";
   
@@ -20,11 +19,15 @@ const getStoredTheme = (): "light" | "dark" => {
   }
   
   // Check system preference as fallback
-  if (window.matchMedia?.("(prefers-color-scheme: dark)").matches) {
-    return "dark";
+  try {
+    if (window.matchMedia?.("(prefers-color-scheme: dark)").matches) {
+      return "dark";
+    }
+  } catch (error) {
+    console.warn("matchMedia not available:", error);
   }
   
-  return "light";
+  return "dark"; // Default to dark theme
 };
 
 const setStoredTheme = (theme: "light" | "dark") => {

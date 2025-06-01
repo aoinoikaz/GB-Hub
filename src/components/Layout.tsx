@@ -9,9 +9,6 @@ import {
   GameController, Coin, X, List, User
 } from "phosphor-react";
 import { getFirestore, doc, getDoc } from "firebase/firestore";
-// Remove auth import - we'll use context instead!
-// import { signOut } from "firebase/auth";
-// import { auth } from "../config/firebase";
 
 interface LayoutProps {
   children: React.ReactNode;

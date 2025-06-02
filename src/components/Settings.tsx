@@ -1,4 +1,4 @@
-import { Sun, Moon, Camera, User, Bell, Lock, Palette, Database, Link, Eye, Trash, Download } from "phosphor-react";
+import { Sun, Moon, Camera, User, Bell, Link, Trash, Download, Shield, Globe, Envelope, Megaphone } from "phosphor-react";
 import { useTheme } from "../context/theme-context";
 import { useState, useEffect, useRef } from "react";
 import { getFirestore, doc, getDoc } from "firebase/firestore";
@@ -14,10 +14,8 @@ const Settings = () => {
   const [uploading, setUploading] = useState(false);
   const [profileImage, setProfileImage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<"account" | "preferences" | "privacy" | "data">("account");
   const [username, setUsername] = useState<string>("");
   const [email, setEmail] = useState<string>("");
-  const [showEmail, setShowEmail] = useState(true);
   const [notifications, setNotifications] = useState({
     email: true,
     push: false,
@@ -27,13 +25,6 @@ const Settings = () => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const firestore = getFirestore();
   const functions = getFunctions(app);
-
-  const tabs = [
-    { id: "account", label: "Account", icon: User },
-    { id: "preferences", label: "Preferences", icon: Palette },
-    { id: "privacy", label: "Privacy", icon: Lock },
-    { id: "data", label: "Data", icon: Database },
-  ];
 
   const fetchProfileImage = async () => {
     if (!user) return;
@@ -149,389 +140,296 @@ const Settings = () => {
   };
 
   return (
-    <div className={`min-h-screen p-6 ${theme === "dark" ? "bg-[#121212]" : "bg-gray-50"}`}>
-      <div className="max-w-6xl mx-auto">
-        {/* Header */}
-        <div className="mb-8">
-          <h1 className={`text-4xl font-bold mb-2 ${theme === "dark" ? "text-white" : "text-gray-900"}`}>
-            Settings
-          </h1>
-          <p className={`${theme === "dark" ? "text-gray-400" : "text-gray-600"}`}>
-            Manage your account and preferences
-          </p>
-        </div>
+    <div className={`p-6 md:p-8 max-w-4xl mx-auto`}>
+      {/* Header */}
+      <div className="mb-8">
+        <h1 className={`text-3xl font-bold mb-2 ${theme === "dark" ? "text-white" : "text-gray-900"}`}>
+          Settings
+        </h1>
+        <p className={`${theme === "dark" ? "text-gray-400" : "text-gray-600"}`}>
+          Manage your account preferences and privacy
+        </p>
+      </div>
 
-        {/* Main Settings Container */}
-        <div className="flex flex-col lg:flex-row gap-6">
-          {/* Sidebar Navigation */}
-          <div className={`lg:w-64 ${theme === "dark" ? "bg-gray-900/50" : "bg-white"} rounded-2xl p-2 backdrop-blur-xl border ${theme === "dark" ? "border-white/10" : "border-gray-200"}`}>
-            {tabs.map((tab) => (
+      {error && (
+        <div className="mb-6 p-4 bg-red-500/10 border border-red-500/30 rounded-2xl backdrop-blur-md">
+          <p className="text-red-400">{error}</p>
+        </div>
+      )}
+
+      {/* Profile Section */}
+      <div className={`mb-8 p-8 rounded-3xl backdrop-blur-xl ${
+        theme === "dark" 
+          ? "bg-white/5 border border-white/10" 
+          : "bg-white/70 border border-gray-200"
+      }`}>
+        <h2 className={`text-2xl font-bold mb-6 flex items-center gap-3 ${theme === "dark" ? "text-white" : "text-gray-900"}`}>
+          <User size={28} weight="duotone" className="text-purple-500" />
+          Profile Information
+        </h2>
+        
+        <div className="flex flex-col md:flex-row gap-8">
+          {/* Profile Image */}
+          <div className="flex flex-col items-center">
+            <div 
+              className="relative group cursor-pointer mb-4"
+              onClick={() => fileInputRef.current?.click()}
+              onDrop={handleDrop}
+              onDragOver={handleDragOver}
+            >
+              {profileImage ? (
+                <img
+                  src={profileImage}
+                  alt="Profile"
+                  className="w-32 h-32 rounded-3xl object-cover group-hover:opacity-75 transition-all duration-200 ring-4 ring-purple-500/20"
+                />
+              ) : (
+                <div className="w-32 h-32 rounded-3xl bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center group-hover:opacity-75 transition-all duration-200">
+                  <User size={48} className="text-white" />
+                </div>
+              )}
+              <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all duration-200">
+                <div className="bg-black/70 rounded-2xl p-3 backdrop-blur-sm">
+                  <Camera size={24} className="text-white" />
+                </div>
+              </div>
+            </div>
+            
+            <input
+              type="file"
+              accept="image/png, image/jpeg, image/jpg, image/bmp"
+              onChange={handleFileChange}
+              className="hidden"
+              ref={fileInputRef}
+            />
+            
+            {selectedFile && (
               <button
-                key={tab.id}
-                onClick={() => setActiveTab(tab.id as any)}
-                className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${
-                  activeTab === tab.id
-                    ? theme === "dark"
-                      ? "bg-gradient-to-r from-purple-500/20 to-pink-500/20 text-white"
-                      : "bg-gradient-to-r from-purple-500/10 to-pink-500/10 text-purple-600"
-                    : theme === "dark"
-                      ? "text-gray-400 hover:text-white hover:bg-white/5"
-                      : "text-gray-600 hover:text-gray-900 hover:bg-gray-100"
+                onClick={uploadProfileImage}
+                disabled={uploading}
+                className={`px-6 py-2 bg-gradient-to-r from-purple-500 to-pink-500 text-white rounded-xl font-medium transition-all ${
+                  uploading ? "opacity-50 cursor-not-allowed" : "hover:shadow-lg hover:scale-105"
                 }`}
               >
-                <tab.icon size={20} weight={activeTab === tab.id ? "fill" : "regular"} />
-                <span className="font-medium">{tab.label}</span>
-                {activeTab === tab.id && (
-                  <div className="ml-auto w-1 h-4 bg-gradient-to-b from-purple-500 to-pink-500 rounded-full" />
-                )}
+                {uploading ? <Spinner size={20} className="animate-spin" /> : "Upload Photo"}
               </button>
-            ))}
+            )}
           </div>
 
-          {/* Content Area */}
-          <div className="flex-1">
-            {error && (
-              <div className="mb-4 p-4 bg-red-500/10 border border-red-500/30 rounded-xl">
-                <p className="text-red-400">{error}</p>
+          {/* Profile Fields */}
+          <div className="flex-1 space-y-6">
+            <div>
+              <label className={`block text-sm font-medium mb-2 ${theme === "dark" ? "text-gray-300" : "text-gray-700"}`}>
+                Username
+              </label>
+              <div className={`px-4 py-3 rounded-xl flex items-center gap-3 ${
+                theme === "dark" 
+                  ? "bg-gray-800/50 text-white border border-gray-700" 
+                  : "bg-gray-100 text-gray-900 border border-gray-300"
+              }`}>
+                <User size={20} className="text-gray-400" />
+                <span>{username}</span>
               </div>
-            )}
-
-            {/* Account Tab */}
-            {activeTab === "account" && (
-              <div className="space-y-6">
-                {/* Profile Section */}
-                <div className={`p-6 rounded-2xl backdrop-blur-xl ${theme === "dark" ? "bg-gray-900/50 border border-white/10" : "bg-white border border-gray-200"}`}>
-                  <h2 className={`text-xl font-bold mb-6 ${theme === "dark" ? "text-white" : "text-gray-900"}`}>
-                    Profile Information
-                  </h2>
-                  
-                  <div className="flex flex-col md:flex-row gap-6">
-                    {/* Profile Image Upload */}
-                    <div className="flex flex-col items-center">
-                      <div 
-                        className="relative group cursor-pointer"
-                        onClick={() => fileInputRef.current?.click()}
-                        onDrop={handleDrop}
-                        onDragOver={handleDragOver}
-                      >
-                        {profileImage ? (
-                          <img
-                            src={profileImage}
-                            alt="Profile"
-                            className="w-32 h-32 rounded-2xl object-cover group-hover:opacity-75 transition"
-                          />
-                        ) : (
-                          <div className="w-32 h-32 rounded-2xl bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center group-hover:opacity-75 transition">
-                            <User size={48} className="text-white" />
-                          </div>
-                        )}
-                        <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition">
-                          <div className="bg-black/50 rounded-full p-3">
-                            <Camera size={24} className="text-white" />
-                          </div>
-                        </div>
-                      </div>
-                      
-                      <input
-                        type="file"
-                        accept="image/png, image/jpeg, image/jpg, image/bmp"
-                        onChange={handleFileChange}
-                        className="hidden"
-                        ref={fileInputRef}
-                      />
-                      
-                      {selectedFile && (
-                        <button
-                          onClick={uploadProfileImage}
-                          disabled={uploading}
-                          className={`mt-4 px-4 py-2 bg-gradient-to-r from-purple-500 to-pink-500 text-white rounded-lg font-medium transition ${
-                            uploading ? "opacity-50 cursor-not-allowed" : "hover:shadow-lg"
-                          }`}
-                        >
-                          {uploading ? <Spinner size={20} className="animate-spin" /> : "Upload Photo"}
-                        </button>
-                      )}
-                    </div>
-
-                    {/* Profile Fields */}
-                    <div className="flex-1 space-y-4">
-                      <div>
-                        <label className={`block text-sm font-medium mb-2 ${theme === "dark" ? "text-gray-300" : "text-gray-700"}`}>
-                          Username
-                        </label>
-                        <input
-                          type="text"
-                          value={username}
-                          readOnly
-                          className={`w-full px-4 py-2 rounded-lg ${
-                            theme === "dark" 
-                              ? "bg-gray-800 text-white border border-gray-700" 
-                              : "bg-gray-100 text-gray-900 border border-gray-300"
-                          }`}
-                        />
-                      </div>
-                      
-                      <div>
-                        <label className={`block text-sm font-medium mb-2 ${theme === "dark" ? "text-gray-300" : "text-gray-700"}`}>
-                          Email
-                        </label>
-                        <input
-                          type="email"
-                          value={email}
-                          readOnly
-                          className={`w-full px-4 py-2 rounded-lg ${
-                            theme === "dark" 
-                              ? "bg-gray-800 text-white border border-gray-700" 
-                              : "bg-gray-100 text-gray-900 border border-gray-300"
-                          }`}
-                        />
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Security Section */}
-                <div className={`p-6 rounded-2xl backdrop-blur-xl ${theme === "dark" ? "bg-gray-900/50 border border-white/10" : "bg-white border border-gray-200"}`}>
-                  <h2 className={`text-xl font-bold mb-6 ${theme === "dark" ? "text-white" : "text-gray-900"}`}>
-                    Security
-                  </h2>
-                  
-                  <div className="space-y-4">
-                    <button className="w-full md:w-auto px-6 py-3 bg-gradient-to-r from-purple-500 to-pink-500 text-white rounded-lg font-medium hover:shadow-lg transition">
-                      Change Password
-                    </button>
-                    
-                    <div className={`p-4 rounded-lg ${theme === "dark" ? "bg-gray-800/50" : "bg-gray-50"}`}>
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <h3 className={`font-medium ${theme === "dark" ? "text-white" : "text-gray-900"}`}>
-                            Two-Factor Authentication
-                          </h3>
-                          <p className={`text-sm ${theme === "dark" ? "text-gray-400" : "text-gray-600"}`}>
-                            Add an extra layer of security to your account
-                          </p>
-                        </div>
-                        <button className="px-4 py-2 bg-green-500/20 text-green-400 rounded-lg hover:bg-green-500/30 transition">
-                          Enable
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                </div>
+            </div>
+            
+            <div>
+              <label className={`block text-sm font-medium mb-2 ${theme === "dark" ? "text-gray-300" : "text-gray-700"}`}>
+                Email Address
+              </label>
+              <div className={`px-4 py-3 rounded-xl flex items-center gap-3 ${
+                theme === "dark" 
+                  ? "bg-gray-800/50 text-white border border-gray-700" 
+                  : "bg-gray-100 text-gray-900 border border-gray-300"
+              }`}>
+                <Envelope size={20} className="text-gray-400" />
+                <span>{email}</span>
               </div>
-            )}
-
-            {/* Preferences Tab */}
-            {activeTab === "preferences" && (
-              <div className="space-y-6">
-                {/* Appearance */}
-                <div className={`p-6 rounded-2xl backdrop-blur-xl ${theme === "dark" ? "bg-gray-900/50 border border-white/10" : "bg-white border border-gray-200"}`}>
-                  <h2 className={`text-xl font-bold mb-6 ${theme === "dark" ? "text-white" : "text-gray-900"}`}>
-                    Appearance
-                  </h2>
-                  
-                  <div className={`flex items-center justify-between p-4 rounded-lg border transition ${
-                    theme === "dark" ? "bg-gray-800 border-gray-700" : "bg-white border-gray-300"
-                  }`}>
-                    <div className="flex items-center space-x-3">
-                      {theme === "light" ? (
-                        <Sun size={24} className="text-yellow-500" />
-                      ) : (
-                        <Moon size={24} className="text-blue-400" />
-                      )}
-                      <div>
-                        <h3 className={`font-medium ${theme === "dark" ? "text-white" : "text-gray-900"}`}>
-                          Dark Mode
-                        </h3>
-                        <p className={`text-sm ${theme === "dark" ? "text-gray-400" : "text-gray-600"}`}>
-                          Toggle between light and dark themes
-                        </p>
-                      </div>
-                    </div>
-                    <button
-                      onClick={toggleTheme}
-                      className="px-4 py-2 bg-gradient-to-r from-purple-500 to-pink-500 text-white rounded-lg hover:shadow-lg transition"
-                    >
-                      Toggle
-                    </button>
-                  </div>
-                </div>
-
-                {/* Notifications */}
-                <div className={`p-6 rounded-2xl backdrop-blur-xl ${theme === "dark" ? "bg-gray-900/50 border border-white/10" : "bg-white border border-gray-200"}`}>
-                  <h2 className={`text-xl font-bold mb-6 flex items-center gap-2 ${theme === "dark" ? "text-white" : "text-gray-900"}`}>
-                    <Bell size={24} />
-                    Notifications
-                  </h2>
-                  
-                  <div className="space-y-4">
-                    {Object.entries(notifications).map(([key, value]) => (
-                      <div key={key} className="flex items-center justify-between">
-                        <div>
-                          <h3 className={`font-medium capitalize ${theme === "dark" ? "text-white" : "text-gray-900"}`}>
-                            {key === "email" ? "Email Notifications" : 
-                             key === "push" ? "Push Notifications" :
-                             key === "updates" ? "Product Updates" : "Newsletter"}
-                          </h3>
-                          <p className={`text-sm ${theme === "dark" ? "text-gray-400" : "text-gray-600"}`}>
-                            {key === "email" ? "Receive notifications via email" : 
-                             key === "push" ? "Browser push notifications" :
-                             key === "updates" ? "Get notified about new features" : "Monthly newsletter and tips"}
-                          </p>
-                        </div>
-                        <button
-                          onClick={() => setNotifications(prev => ({ ...prev, [key]: !value }))}
-                          className={`relative inline-flex h-7 w-12 items-center rounded-full transition-colors ${
-                            value ? 'bg-purple-500' : theme === "dark" ? 'bg-gray-600' : 'bg-gray-300'
-                          }`}
-                        >
-                          <span
-                            className={`inline-block h-5 w-5 transform rounded-full bg-white transition-transform shadow-lg ${
-                              value ? 'translate-x-6' : 'translate-x-1'
-                            }`}
-                          />
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* Privacy Tab */}
-            {activeTab === "privacy" && (
-              <div className="space-y-6">
-                <div className={`p-6 rounded-2xl backdrop-blur-xl ${theme === "dark" ? "bg-gray-900/50 border border-white/10" : "bg-white border border-gray-200"}`}>
-                  <h2 className={`text-xl font-bold mb-6 flex items-center gap-2 ${theme === "dark" ? "text-white" : "text-gray-900"}`}>
-                    <Eye size={24} />
-                    Privacy Settings
-                  </h2>
-                  
-                  <div className="space-y-4">
-                    <div className={`flex items-center justify-between p-4 rounded-lg ${theme === "dark" ? "bg-gray-800/50" : "bg-gray-50"}`}>
-                      <div>
-                        <h3 className={`font-medium ${theme === "dark" ? "text-white" : "text-gray-900"}`}>
-                          Profile Visibility
-                        </h3>
-                        <p className={`text-sm ${theme === "dark" ? "text-gray-400" : "text-gray-600"}`}>
-                          Control who can see your profile
-                        </p>
-                      </div>
-                      <select className={`px-4 py-2 rounded-lg ${
-                        theme === "dark" 
-                          ? "bg-gray-700 text-white border border-gray-600" 
-                          : "bg-white text-gray-900 border border-gray-300"
-                      }`}>
-                        <option>Everyone</option>
-                        <option>Friends Only</option>
-                        <option>Private</option>
-                      </select>
-                    </div>
-                    
-                    <div className={`flex items-center justify-between p-4 rounded-lg ${theme === "dark" ? "bg-gray-800/50" : "bg-gray-50"}`}>
-                      <div>
-                        <h3 className={`font-medium ${theme === "dark" ? "text-white" : "text-gray-900"}`}>
-                          Show Email
-                        </h3>
-                        <p className={`text-sm ${theme === "dark" ? "text-gray-400" : "text-gray-600"}`}>
-                          Display email on your public profile
-                        </p>
-                      </div>
-                      <button
-                        onClick={() => setShowEmail(!showEmail)}
-                        className={`relative inline-flex h-7 w-12 items-center rounded-full transition-colors ${
-                          showEmail ? 'bg-purple-500' : theme === "dark" ? 'bg-gray-600' : 'bg-gray-300'
-                        }`}
-                      >
-                        <span
-                          className={`inline-block h-5 w-5 transform rounded-full bg-white transition-transform shadow-lg ${
-                            showEmail ? 'translate-x-6' : 'translate-x-1'
-                          }`}
-                        />
-                      </button>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Connected Accounts */}
-                <div className={`p-6 rounded-2xl backdrop-blur-xl ${theme === "dark" ? "bg-gray-900/50 border border-white/10" : "bg-white border border-gray-200"}`}>
-                  <h2 className={`text-xl font-bold mb-6 flex items-center gap-2 ${theme === "dark" ? "text-white" : "text-gray-900"}`}>
-                    <Link size={24} />
-                    Connected Accounts
-                  </h2>
-                  
-                  <div className="space-y-3">
-                    <div className={`flex items-center justify-between p-4 rounded-lg border ${theme === "dark" ? "bg-gray-800/50 border-gray-700" : "bg-gray-50 border-gray-300"}`}>
-                      <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 bg-[#5865F2] rounded-lg flex items-center justify-center">
-                          <span className="text-white font-bold">D</span>
-                        </div>
-                        <div>
-                          <h3 className={`font-medium ${theme === "dark" ? "text-white" : "text-gray-900"}`}>
-                            Discord
-                          </h3>
-                          <p className={`text-sm ${theme === "dark" ? "text-gray-400" : "text-gray-600"}`}>
-                            Not connected
-                          </p>
-                        </div>
-                      </div>
-                      <button className="px-4 py-2 bg-[#5865F2] text-white rounded-lg hover:bg-[#4752C4] transition">
-                        Connect
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* Data Tab */}
-            {activeTab === "data" && (
-              <div className="space-y-6">
-                <div className={`p-6 rounded-2xl backdrop-blur-xl ${theme === "dark" ? "bg-gray-900/50 border border-white/10" : "bg-white border border-gray-200"}`}>
-                  <h2 className={`text-xl font-bold mb-6 ${theme === "dark" ? "text-white" : "text-gray-900"}`}>
-                    Your Data
-                  </h2>
-                  
-                  <div className="space-y-4">
-                    <div className={`p-4 rounded-lg ${theme === "dark" ? "bg-gray-800/50" : "bg-gray-50"}`}>
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <h3 className={`font-medium flex items-center gap-2 ${theme === "dark" ? "text-white" : "text-gray-900"}`}>
-                            <Download size={20} />
-                            Download Your Data
-                          </h3>
-                          <p className={`text-sm ${theme === "dark" ? "text-gray-400" : "text-gray-600"}`}>
-                            Get a copy of all your data
-                          </p>
-                        </div>
-                        <button className="px-4 py-2 bg-blue-500/20 text-blue-400 rounded-lg hover:bg-blue-500/30 transition">
-                          Request
-                        </button>
-                      </div>
-                    </div>
-                    
-                    <div className={`p-4 rounded-lg border ${theme === "dark" ? "bg-red-500/10 border-red-500/30" : "bg-red-50 border-red-300"}`}>
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <h3 className={`font-medium flex items-center gap-2 text-red-400`}>
-                            <Trash size={20} />
-                            Delete Account
-                          </h3>
-                          <p className={`text-sm ${theme === "dark" ? "text-red-400/70" : "text-red-600"}`}>
-                            Permanently delete your account and data
-                          </p>
-                        </div>
-                        <button className="px-4 py-2 bg-red-500/20 text-red-400 rounded-lg hover:bg-red-500/30 transition">
-                          Delete
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
+            </div>
           </div>
         </div>
+      </div>
+
+      {/* Quick Settings Grid */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+        {/* Appearance Card */}
+        <div className={`p-6 rounded-3xl backdrop-blur-xl ${
+          theme === "dark" 
+            ? "bg-white/5 border border-white/10" 
+            : "bg-white/70 border border-gray-200"
+        }`}>
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className={`p-3 rounded-2xl ${
+                theme === "dark" ? "bg-purple-500/20" : "bg-purple-100"
+              }`}>
+                {theme === "light" ? (
+                  <Sun size={24} className="text-yellow-500" />
+                ) : (
+                  <Moon size={24} className="text-blue-400" />
+                )}
+              </div>
+              <div>
+                <h3 className={`font-semibold ${theme === "dark" ? "text-white" : "text-gray-900"}`}>
+                  Dark Mode
+                </h3>
+                <p className={`text-sm ${theme === "dark" ? "text-gray-400" : "text-gray-600"}`}>
+                  {theme === "dark" ? "Currently enabled" : "Currently disabled"}
+                </p>
+              </div>
+            </div>
+            <button
+              onClick={toggleTheme}
+              className={`relative inline-flex h-7 w-12 items-center rounded-full transition-colors ${
+                theme === "dark" ? 'bg-purple-500' : 'bg-gray-300'
+              }`}
+            >
+              <span
+                className={`inline-block h-5 w-5 transform rounded-full bg-white transition-transform shadow-lg ${
+                  theme === "dark" ? 'translate-x-6' : 'translate-x-1'
+                }`}
+              />
+            </button>
+          </div>
+        </div>
+
+        {/* Two-Factor Auth Card */}
+        <div className={`p-6 rounded-3xl backdrop-blur-xl ${
+          theme === "dark" 
+            ? "bg-white/5 border border-white/10" 
+            : "bg-white/70 border border-gray-200"
+        }`}>
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className={`p-3 rounded-2xl ${
+                theme === "dark" ? "bg-green-500/20" : "bg-green-100"
+              }`}>
+                <Shield size={24} className="text-green-500" />
+              </div>
+              <div>
+                <h3 className={`font-semibold ${theme === "dark" ? "text-white" : "text-gray-900"}`}>
+                  2FA Security
+                </h3>
+                <p className={`text-sm ${theme === "dark" ? "text-gray-400" : "text-gray-600"}`}>
+                  Not enabled
+                </p>
+              </div>
+            </div>
+            <button className="px-4 py-2 bg-green-500/20 text-green-400 rounded-xl hover:bg-green-500/30 transition-all text-sm font-medium">
+              Enable
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* Notifications Section */}
+      <div className={`mb-8 p-8 rounded-3xl backdrop-blur-xl ${
+        theme === "dark" 
+          ? "bg-white/5 border border-white/10" 
+          : "bg-white/70 border border-gray-200"
+      }`}>
+        <h2 className={`text-2xl font-bold mb-6 flex items-center gap-3 ${theme === "dark" ? "text-white" : "text-gray-900"}`}>
+          <Bell size={28} weight="duotone" className="text-purple-500" />
+          Notifications
+        </h2>
+        
+        <div className="space-y-4">
+          {Object.entries(notifications).map(([key, value]) => (
+            <div key={key} className={`flex items-center justify-between p-4 rounded-2xl ${
+              theme === "dark" ? "bg-gray-800/30" : "bg-gray-50"
+            }`}>
+              <div className="flex items-center gap-3">
+                <div className={`p-2 rounded-xl ${
+                  value 
+                    ? theme === "dark" ? "bg-purple-500/20" : "bg-purple-100"
+                    : theme === "dark" ? "bg-gray-700" : "bg-gray-200"
+                }`}>
+                  {key === "email" && <Envelope size={20} className={value ? "text-purple-500" : "text-gray-500"} />}
+                  {key === "push" && <Bell size={20} className={value ? "text-purple-500" : "text-gray-500"} />}
+                  {key === "updates" && <Megaphone size={20} className={value ? "text-purple-500" : "text-gray-500"} />}
+                  {key === "newsletter" && <Globe size={20} className={value ? "text-purple-500" : "text-gray-500"} />}
+                </div>
+                <div>
+                  <h3 className={`font-medium ${theme === "dark" ? "text-white" : "text-gray-900"}`}>
+                    {key === "email" ? "Email Notifications" : 
+                     key === "push" ? "Push Notifications" :
+                     key === "updates" ? "Product Updates" : "Newsletter"}
+                  </h3>
+                  <p className={`text-sm ${theme === "dark" ? "text-gray-400" : "text-gray-600"}`}>
+                    {key === "email" ? "Receive notifications via email" : 
+                     key === "push" ? "Browser push notifications" :
+                     key === "updates" ? "Get notified about new features" : "Monthly newsletter and tips"}
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setNotifications(prev => ({ ...prev, [key]: !value }))}
+                className={`relative inline-flex h-7 w-12 items-center rounded-full transition-colors ${
+                  value ? 'bg-purple-500' : theme === "dark" ? 'bg-gray-600' : 'bg-gray-300'
+                }`}
+              >
+                <span
+                  className={`inline-block h-5 w-5 transform rounded-full bg-white transition-transform shadow-lg ${
+                    value ? 'translate-x-6' : 'translate-x-1'
+                  }`}
+                />
+              </button>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Connected Accounts */}
+      <div className={`mb-8 p-8 rounded-3xl backdrop-blur-xl ${
+        theme === "dark" 
+          ? "bg-white/5 border border-white/10" 
+          : "bg-white/70 border border-gray-200"
+      }`}>
+        <h2 className={`text-2xl font-bold mb-6 flex items-center gap-3 ${theme === "dark" ? "text-white" : "text-gray-900"}`}>
+          <Link size={28} weight="duotone" className="text-purple-500" />
+          Connected Accounts
+        </h2>
+        
+        <div className={`p-4 rounded-2xl flex items-center justify-between ${
+          theme === "dark" ? "bg-gray-800/30" : "bg-gray-50"
+        }`}>
+          <div className="flex items-center gap-3">
+            <div className="w-12 h-12 bg-[#5865F2] rounded-xl flex items-center justify-center">
+              <span className="text-white font-bold text-lg">D</span>
+            </div>
+            <div>
+              <h3 className={`font-medium ${theme === "dark" ? "text-white" : "text-gray-900"}`}>
+                Discord
+              </h3>
+              <p className={`text-sm ${theme === "dark" ? "text-gray-400" : "text-gray-600"}`}>
+                Connect for community features
+              </p>
+            </div>
+          </div>
+          <button className="px-6 py-2 bg-[#5865F2] text-white rounded-xl hover:bg-[#4752C4] transition-all font-medium">
+            Connect
+          </button>
+        </div>
+      </div>
+
+      {/* Actions Section */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <button className={`p-4 rounded-2xl flex items-center justify-center gap-3 font-medium transition-all ${
+          theme === "dark"
+            ? "bg-gray-800/50 hover:bg-gray-800 text-gray-300"
+            : "bg-gray-100 hover:bg-gray-200 text-gray-700"
+        }`}>
+          <Download size={20} />
+          Download Your Data
+        </button>
+        
+        <button className={`p-4 rounded-2xl flex items-center justify-center gap-3 font-medium transition-all ${
+          theme === "dark"
+            ? "bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/30"
+            : "bg-red-50 hover:bg-red-100 text-red-600 border border-red-300"
+        }`}>
+          <Trash size={20} />
+          Delete Account
+        </button>
       </div>
     </div>
   );

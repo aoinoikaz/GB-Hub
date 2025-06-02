@@ -1,4 +1,4 @@
-// src/components/Layout.tsx - FIXED VERSION
+// src/components/Layout.tsx - COMPLETE UPDATED VERSION
 
 import { useState, useEffect } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
@@ -16,7 +16,7 @@ interface LayoutProps {
 
 const Layout = ({ children }: LayoutProps) => {
   const { theme } = useTheme();
-  const { user: authUser, logout } = useAuth(); // Get logout from context!
+  const { user: authUser, logout } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
   const [profileImage, setProfileImage] = useState<string | null>(null);
@@ -53,10 +53,9 @@ const Layout = ({ children }: LayoutProps) => {
     fetchProfileImage();
   }, [authUser, firestore]);
 
-  // FIXED: Use logout from context instead of direct signOut
   const handleLogout = async () => {
     try {
-      await logout(); // This already handles navigation!
+      await logout();
     } catch (error) {
       console.error("Logout failed:", error);
     }
@@ -141,19 +140,6 @@ const Layout = ({ children }: LayoutProps) => {
             </div>
           </div>
           
-          {/* Custom Status Indicator - Properly Aligned */}
-          <a 
-            href="https://status.gondolabros.com/"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="block mb-4"
-          >
-            <div className="flex items-center gap-2 px-3 py-2 bg-gray-800 rounded-lg hover:bg-gray-700 transition-colors">
-              <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse" />
-              <span className="text-xs text-gray-400">All services are online</span>
-            </div>
-          </a>
-          
           <button
             onClick={handleLogout}
             className={`w-full flex items-center justify-center gap-2 px-4 py-2 rounded-lg transition-colors ${
@@ -180,6 +166,17 @@ const Layout = ({ children }: LayoutProps) => {
             GB
           </h1>
           <div className="flex items-center gap-3">
+            {/* Mobile Status Indicator - Dot Only */}
+            <a 
+              href="https://status.gondolabros.com/"
+              target="_blank"
+              rel="noopener noreferrer"
+              className={`p-2 rounded-lg ${
+                theme === "dark" ? "text-green-400" : "text-green-600"
+              }`}
+            >
+              <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
+            </a>
             <button className={`p-2 rounded-lg ${
               theme === "dark" ? "text-gray-400 hover:text-white" : "text-gray-600 hover:text-gray-900"
             }`}>
@@ -206,7 +203,7 @@ const Layout = ({ children }: LayoutProps) => {
               ? "bg-gray-900/95" 
               : "bg-white/95"
           }`}>
-            {/* Mobile menu content similar to sidebar */}
+            {/* Mobile menu content */}
             <div className="p-6">
               <div className="flex items-center justify-between mb-8">
                 <h2 className="text-xl font-bold bg-gradient-to-r from-purple-500 to-pink-500 bg-clip-text text-transparent">
@@ -244,6 +241,46 @@ const Layout = ({ children }: LayoutProps) => {
                   </button>
                 ))}
               </nav>
+              
+              {/* Mobile User Section */}
+              <div className="absolute bottom-0 left-0 right-0 p-6 border-t border-white/10">
+                <div className="flex items-center gap-3 mb-4">
+                  {profileImage ? (
+                    <img
+                      src={profileImage}
+                      alt="Profile"
+                      className="w-10 h-10 rounded-full object-cover"
+                    />
+                  ) : (
+                    <div className="w-10 h-10 rounded-full bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center">
+                      <User size={20} className="text-white" />
+                    </div>
+                  )}
+                  <div className="flex-1 min-w-0">
+                    <p className={`font-medium truncate ${theme === "dark" ? "text-white" : "text-gray-900"}`}>
+                      {authUser?.displayName || "User"}
+                    </p>
+                    <p className={`text-xs truncate ${theme === "dark" ? "text-gray-400" : "text-gray-600"}`}>
+                      {authUser?.email}
+                    </p>
+                  </div>
+                </div>
+                
+                <button
+                  onClick={() => {
+                    handleLogout();
+                    setIsMobileMenuOpen(false);
+                  }}
+                  className={`w-full flex items-center justify-center gap-2 px-4 py-2 rounded-lg transition-colors ${
+                    theme === "dark"
+                      ? "bg-red-500/10 text-red-400 hover:bg-red-500/20"
+                      : "bg-red-50 text-red-600 hover:bg-red-100"
+                  }`}
+                >
+                  <SignOut size={18} />
+                  <span className="text-sm font-medium">Logout</span>
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -269,6 +306,23 @@ const Layout = ({ children }: LayoutProps) => {
             </h2>
           </div>
           <div className="flex items-center gap-4">
+            {/* Status Indicator in Top Bar */}
+            <a 
+              href="https://status.gondolabros.com/"
+              target="_blank"
+              rel="noopener noreferrer"
+              className={`hidden lg:flex items-center gap-2 px-3 py-1.5 rounded-lg transition-colors ${
+                theme === "dark"
+                  ? "bg-green-500/10 hover:bg-green-500/20 border border-green-500/20"
+                  : "bg-green-50 hover:bg-green-100 border border-green-200"
+              }`}
+            >
+              <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
+              <span className={`text-xs font-medium ${
+                theme === "dark" ? "text-green-400" : "text-green-700"
+              }`}>All Systems Operational</span>
+            </a>
+            
             <button className={`p-2 rounded-lg transition-colors ${
               theme === "dark" 
                 ? "text-gray-400 hover:text-white hover:bg-white/10" 

@@ -450,24 +450,6 @@ const Dashboard = () => {
             </div>
           </div>
         </div>
-
-        {/* Footer Status Bar */}
-        <div className="mt-12 text-center">
-          <a 
-            href="https://status.gondolabros.com/" 
-            target="_blank" 
-            rel="noopener noreferrer"
-            className={`inline-flex items-center gap-2 px-4 py-2 rounded-full transition-all ${
-              theme === "dark" 
-                ? "bg-white/5 hover:bg-white/10 text-gray-400 hover:text-white" 
-                : "bg-gray-100 hover:bg-gray-200 text-gray-600 hover:text-gray-900"
-            }`}
-          >
-            <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse" />
-            <span className="text-sm font-medium">All Systems Operational</span>
-            <ArrowRight size={14} />
-          </a>
-        </div>
       </div>
     </div>
   );

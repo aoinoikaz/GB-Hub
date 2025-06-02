@@ -5,7 +5,7 @@ import { db, functions } from "../config/firebase";
 import { doc, getDoc, collection, getDocs, query, where, orderBy } from "firebase/firestore";
 import { httpsCallable } from "firebase/functions";
 import { PayPalButtons, usePayPalScriptReducer } from "@paypal/react-paypal-js";
-import { Spinner, Coin, CurrencyDollar, Handshake, Gift, Trophy, ArrowRight } from "phosphor-react";
+import { Spinner, Coin, CurrencyDollar, Handshake, Gift, Trophy, ArrowRight, Lightning, Star, Plus, Sparkle, Clock, CheckCircle, Copy } from "phosphor-react";
 import { debounce } from "lodash";
 import { v4 as uuidv4 } from "uuid";
 import { useNavigate } from "react-router-dom";
@@ -81,7 +81,7 @@ const Store = () => {
   const navigate = useNavigate();
   const [{ isPending, isResolved, isRejected }] = usePayPalScriptReducer();
   const [tokenBalance, setTokenBalance] = useState<number>(0);
-const [selectedTokenPackage, setSelectedTokenPackage] = useState<"50" | "100" | "300" | "600" | "1200" | "2500" | null>(null);
+  const [selectedTokenPackage, setSelectedTokenPackage] = useState<"50" | "100" | "300" | "600" | "1200" | "2500" | null>(null);
   const [isCreatingOrder, setIsCreatingOrder] = useState<boolean>(false);
   const [tradeRecipientUsername, setTradeRecipientUsername] = useState<string>("");
   const [tradeRecipientExists, setTradeRecipientExists] = useState<boolean | null>(null);
@@ -90,6 +90,7 @@ const [selectedTokenPackage, setSelectedTokenPackage] = useState<"50" | "100" | 
   const [error, setError] = useState<string | null>(null);
   const [transactionHistory, setTransactionHistory] = useState<Transaction[]>([]);
   const [isLoadingHistory, setIsLoadingHistory] = useState<boolean>(true);
+  const [copiedCode, setCopiedCode] = useState(false);
 
   // Pagination state
   const [currentPage, setCurrentPage] = useState<number>(1);
@@ -390,243 +391,494 @@ const [selectedTokenPackage, setSelectedTokenPackage] = useState<"50" | "100" | 
 
   const referralCode = authUser?.uid?.slice(0, 8).toUpperCase() || "N/A";
 
+  const copyReferralCode = () => {
+    navigator.clipboard.writeText(referralCode);
+    setCopiedCode(true);
+    setTimeout(() => setCopiedCode(false), 2000);
+  };
+
   return (
-    <div className={`min-h-screen p-6 ${theme === "dark" ? "bg-[#121212] text-gray-100" : "bg-gray-100 text-gray-900"}`}>
-      <div className="max-w-4xl mx-auto">
-        {/* Header */}
-        <div className="mb-8 text-center">
-          <div className="flex items-center justify-center space-x-3 mb-4">
-            <Coin size={48} className="text-yellow-400" />
-            <h1 className="text-4xl font-bold">Token Store</h1>
+    <div className={`p-6 md:p-8 max-w-7xl mx-auto`}>
+      {/* Header */}
+      <div className="text-center mb-12">
+        <div className="flex items-center justify-center gap-3 mb-4">
+          <div className="p-3 rounded-2xl bg-gradient-to-br from-yellow-500 to-orange-500 shadow-lg">
+            <Coin size={36} className="text-white" />
           </div>
-          <p className="text-gray-400 text-lg">Purchase, trade, and manage your tokens</p>
-          <div className="mt-4 p-4 bg-gray-800 rounded-lg inline-block">
-            <p className="text-2xl font-bold text-yellow-400">{tokenBalance} tokens</p>
-            <p className="text-gray-400 text-sm">Current Balance</p>
-          </div>
+          <h1 className={`text-4xl md:text-5xl font-bold ${theme === "dark" ? "text-white" : "text-gray-900"}`}>
+            Token Store
+          </h1>
         </div>
+        <p className={`text-lg ${theme === "dark" ? "text-gray-400" : "text-gray-600"}`}>
+          Purchase, trade, and manage your tokens
+        </p>
+      </div>
 
-        {error && <p className="text-red-500 text-sm mb-4 text-center">{error}</p>}
-
-        {/* Quick Actions */}
-        <div className="mb-8 grid grid-cols-1 md:grid-cols-3 gap-4">
-          <button
-            onClick={() => navigate("/media")}
-            className="p-4 bg-gradient-to-r from-purple-600 to-pink-600 rounded-lg hover:opacity-90 transition"
-          >
-            <h3 className="font-semibold mb-2 flex items-center justify-center">
-              <CurrencyDollar size={20} className="mr-2" />
-              Spend Tokens
-            </h3>
-            <p className="text-sm opacity-90">Subscribe to media plans</p>
-          </button>
-          
-          <button
-            onClick={() => document.getElementById("trade-tokens")?.scrollIntoView({ behavior: "smooth" })}
-            className="p-4 bg-gradient-to-r from-blue-600 to-purple-600 rounded-lg hover:opacity-90 transition"
-          >
-            <h3 className="font-semibold mb-2 flex items-center justify-center">
-              <Handshake size={20} className="mr-2" />
-              Trade Tokens
-            </h3>
-            <p className="text-sm opacity-90">Send tokens to friends</p>
-          </button>
-          
-          <button
-            onClick={() => navigate("/leaderboard")}
-            className="p-4 bg-gradient-to-r from-yellow-600 to-orange-600 rounded-lg hover:opacity-90 transition"
-          >
-            <h3 className="font-semibold mb-2 flex items-center justify-center">
-              <Trophy size={20} className="mr-2" />
-              Leaderboard
-            </h3>
-            <p className="text-sm opacity-90">View top contributors</p>
-          </button>
+      {error && (
+        <div className="mb-6 p-4 bg-red-500/10 border border-red-500/30 rounded-2xl backdrop-blur-md">
+          <p className="text-red-400">{error}</p>
         </div>
+      )}
 
-        {/* Token Purchase */}
-        <div id="token-purchase" className="mb-8 p-6 bg-[#1c1c1c] rounded-xl shadow-xl">
-          <h2 className="text-2xl font-bold mb-6 text-white flex items-center">
-            <CurrencyDollar size={28} className="mr-2 text-green-400" />
-            Purchase Tokens
-          </h2>
-          
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-            {Object.entries(tokenPackages).map(([tokens, pkg]) => (
-              <div
-                key={tokens}
-                onClick={() => setSelectedTokenPackage(tokens as "50" | "100" | "300" | "600" | "1200" | "2500")}
-                className={`p-4 border-2 rounded-lg cursor-pointer transition ${
-                  selectedTokenPackage === tokens
-                    ? "border-purple-500 bg-purple-500/10"
-                    : "border-gray-600 hover:border-gray-500"
-                }`}
-              >
-                <div className="flex justify-between items-start mb-2">
-                  <div>
-                    <p className="text-2xl font-bold text-white">{tokens} tokens</p>
-                    {pkg.bonus > 0 && (
-                      <p className="text-sm text-green-400">+{pkg.bonus} bonus tokens!</p>
-                    )}
-                  </div>
-                  <p className="text-xl font-semibold text-green-400">${pkg.amount}</p>
-                </div>
-                {pkg.bonus > 0 && (
-                  <p className="text-sm text-gray-400">
-                    {Math.round((pkg.bonus / parseInt(tokens)) * 100)}% discount
-                  </p>
-                )}
-              </div>
-            ))}
+      {/* Token Balance & Quick Actions */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-12">
+        {/* Balance Card */}
+        <div className={`p-6 rounded-3xl backdrop-blur-xl ${
+          theme === "dark" 
+            ? "bg-gradient-to-br from-yellow-500/10 to-orange-500/10 border border-yellow-500/20" 
+            : "bg-gradient-to-br from-yellow-50 to-orange-50 border border-yellow-200"
+        }`}>
+          <div className="flex items-center justify-between mb-4">
+            <div className="p-3 rounded-xl bg-gradient-to-br from-yellow-500 to-orange-500 shadow-lg">
+              <Coin size={24} className="text-white" />
+            </div>
+            <Sparkle size={20} className="text-yellow-400" />
           </div>
-
-          {isPending && (
-            <div className="text-gray-200 text-center">
-              <Spinner size={24} className="animate-spin mx-auto" />
-              <p>Loading PayPal...</p>
-            </div>
-          )}
-          
-          {isRejected && (
-            <div className="text-red-500 text-center">
-              <p>Error loading PayPal. Please refresh the page or try again later.</p>
-            </div>
-          )}
-          
-          {selectedTokenPackage && isResolved && (
-            <div className="mt-4">
-              <PayPalButtons
-                style={{
-                  shape: "rect",
-                  color: "blue",
-                  layout: "vertical",
-                  label: "pay",
-                }}
-                createOrder={handleCreateOrder}
-                onApprove={handleOnApprove}
-                onError={handleOnError}
-                disabled={loading || isCreatingOrder}
-              />
-              {isCreatingOrder && (
-                <div className="text-gray-200 text-center mt-2">
-                  <Spinner size={24} className="animate-spin mx-auto" />
-                  <p>Preparing Payment...</p>
-                </div>
-              )}
-            </div>
-          )}
-          
-          <p className="text-gray-400 text-xs text-center mt-4">
-            Token purchases are non-refundable. By purchasing, you agree to our{" "}
-            <a href="/terms" className="text-purple-400 hover:text-purple-300 underline">Terms</a>{" "}
-            and{" "}
-            <a href="/refund-policy" className="text-purple-400 hover:text-purple-300 underline">Refund Policy</a>.
+          <p className={`text-sm ${theme === "dark" ? "text-gray-400" : "text-gray-600"} mb-1`}>
+            Current Balance
+          </p>
+          <p className={`text-3xl font-bold ${theme === "dark" ? "text-white" : "text-gray-900"}`}>
+            {tokenBalance.toLocaleString()}
           </p>
         </div>
 
-        {/* Trade Tokens */}
-        <div id="trade-tokens" className="mb-8 p-6 bg-[#1c1c1c] rounded-xl shadow-xl">
-          <h2 className="text-2xl font-bold mb-6 text-white flex items-center">
-            <Handshake size={28} className="mr-2 text-blue-400" />
-            Trade Tokens
-          </h2>
-          <div className="space-y-4">
-            <div className="relative">
-              <label className="block mb-2 text-gray-300">Recipient Username</label>
-              <div className="relative">
-                <input
-                  type="text"
-                  value={tradeRecipientUsername}
-                  onChange={(e) => setTradeRecipientUsername(e.target.value)}
-                  placeholder="Enter username to trade with"
-                  className="w-full px-4 py-2 border rounded-md bg-gray-800 border-gray-600 text-white focus:ring-2 focus:ring-purple-500 focus:outline-none pr-10"
-                  disabled={loading}
-                />
-                {tradeRecipientExists !== null && (
-                  <span className="absolute right-3 top-1/2 transform -translate-y-1/2 flex items-center text-lg">
-                    {tradeRecipientExists ? (
-                      <span className="text-green-500">✓</span>
-                    ) : (
-                      <span className="text-red-500">✗</span>
-                    )}
-                  </span>
-                )}
-              </div>
+        {/* Quick Action: Media */}
+        <button
+          onClick={() => navigate("/media")}
+          className={`group p-6 rounded-3xl backdrop-blur-xl transition-all hover:scale-105 ${
+            theme === "dark" 
+              ? "bg-gradient-to-br from-purple-500/10 to-pink-500/10 border border-purple-500/20 hover:border-purple-500/40" 
+              : "bg-gradient-to-br from-purple-50 to-pink-50 border border-purple-200 hover:border-purple-300"
+          }`}
+        >
+          <div className="flex items-center justify-between mb-4">
+            <div className="p-3 rounded-xl bg-gradient-to-br from-purple-500 to-pink-500 shadow-lg">
+              <CurrencyDollar size={24} className="text-white" />
             </div>
-            <div>
-              <label className="block mb-2 text-gray-300">Number of Tokens</label>
-              <input
-                type="number"
-                value={tradeAmount}
-                onChange={(e) => setTradeAmount(e.target.value)}
-                placeholder="Enter number of tokens to trade"
-                className="w-full px-4 py-2 border rounded-md bg-gray-800 border-gray-600 text-white focus:ring-2 focus:ring-purple-500 focus:outline-none"
-                disabled={loading}
-                min="1"
-                max={tokenBalance}
-              />
-              {tradeAmount && parseInt(tradeAmount) > tokenBalance && (
-                <p className="text-red-400 text-sm mt-1">You only have {tokenBalance} tokens</p>
-              )}
+            <ArrowRight size={20} className={`transition-transform group-hover:translate-x-1 ${
+              theme === "dark" ? "text-purple-400" : "text-purple-600"
+            }`} />
+          </div>
+          <p className={`text-sm ${theme === "dark" ? "text-gray-400" : "text-gray-600"} mb-1 text-left`}>
+            Spend Tokens
+          </p>
+          <p className={`font-semibold text-left ${theme === "dark" ? "text-white" : "text-gray-900"}`}>
+            Subscribe to Media
+          </p>
+        </button>
+
+        {/* Quick Action: Leaderboard */}
+        <button
+          onClick={() => navigate("/leaderboard")}
+          className={`group p-6 rounded-3xl backdrop-blur-xl transition-all hover:scale-105 ${
+            theme === "dark" 
+              ? "bg-gradient-to-br from-blue-500/10 to-purple-500/10 border border-blue-500/20 hover:border-blue-500/40" 
+              : "bg-gradient-to-br from-blue-50 to-purple-50 border border-blue-200 hover:border-blue-300"
+          }`}
+        >
+          <div className="flex items-center justify-between mb-4">
+            <div className="p-3 rounded-xl bg-gradient-to-br from-blue-500 to-purple-500 shadow-lg">
+              <Trophy size={24} className="text-white" />
             </div>
-            <button
-              onClick={handleTradeTokens}
-              disabled={loading || !tradeRecipientUsername || !tradeAmount || parseInt(tradeAmount) <= 0 || parseInt(tradeAmount) > tokenBalance || !tradeRecipientExists}
-              className={`w-full py-3 px-4 rounded-md font-semibold transition flex items-center justify-center ${
-                loading || !tradeRecipientUsername || !tradeAmount || parseInt(tradeAmount) <= 0 || parseInt(tradeAmount) > tokenBalance || !tradeRecipientExists 
-                  ? "bg-gray-600 cursor-not-allowed opacity-50" 
-                  : "bg-gradient-to-r from-blue-500 to-purple-500 hover:opacity-90"
-              } text-white`}
-            >
-              {loading ? (
-                <Spinner size={20} className="animate-spin" />
-              ) : (
-                <>
-                  <ArrowRight size={20} className="mr-2" />
-                  Send Tokens
-                </>
-              )}
-            </button>
+            <ArrowRight size={20} className={`transition-transform group-hover:translate-x-1 ${
+              theme === "dark" ? "text-blue-400" : "text-blue-600"
+            }`} />
+          </div>
+          <p className={`text-sm ${theme === "dark" ? "text-gray-400" : "text-gray-600"} mb-1 text-left`}>
+            Community
+          </p>
+          <p className={`font-semibold text-left ${theme === "dark" ? "text-white" : "text-gray-900"}`}>
+            View Leaderboard
+          </p>
+        </button>
+      </div>
+
+      {/* Token Packages */}
+      <div className={`mb-12 p-8 rounded-3xl backdrop-blur-xl ${
+        theme === "dark" 
+          ? "bg-white/5 border border-white/10" 
+          : "bg-white/70 border border-gray-200"
+      }`}>
+        <div className="flex items-center gap-3 mb-8">
+          <div className="p-3 rounded-2xl bg-gradient-to-br from-green-500 to-emerald-500 shadow-lg">
+            <Plus size={28} className="text-white" />
+          </div>
+          <div>
+            <h2 className={`text-2xl font-bold ${theme === "dark" ? "text-white" : "text-gray-900"}`}>
+              Purchase Tokens
+            </h2>
+            <p className={`text-sm ${theme === "dark" ? "text-gray-400" : "text-gray-600"}`}>
+              Select a package to get started
+            </p>
           </div>
         </div>
-
-        {/* Transaction History */}
-        <div className="mb-8 p-6 bg-[#1c1c1c] rounded-xl shadow-xl">
-          <div className="flex justify-between items-center mb-6">
-            <h2 className="text-2xl font-bold text-white">Transaction History</h2>
-            <div className="flex items-center space-x-2">
-              <label className="text-gray-300">Show:</label>
-              <select
-                value={transactionsPerPage}
-                onChange={handleTransactionsPerPageChange}
-                className="px-2 py-1 border rounded-md bg-gray-800 border-gray-600 text-white focus:ring-2 focus:ring-purple-500 focus:outline-none"
+        
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
+          {Object.entries(tokenPackages).map(([tokens, pkg]) => {
+            const isSelected = selectedTokenPackage === tokens;
+            const hasBonus = pkg.bonus > 0;
+            
+            return (
+              <div
+                key={tokens}
+                onClick={() => setSelectedTokenPackage(tokens as any)}
+                className={`relative p-6 rounded-2xl cursor-pointer transition-all hover:scale-105 ${
+                  isSelected
+                    ? theme === "dark"
+                      ? "bg-gradient-to-br from-purple-500/20 to-pink-500/20 border-2 border-purple-500"
+                      : "bg-gradient-to-br from-purple-500/10 to-pink-500/10 border-2 border-purple-500"
+                    : theme === "dark"
+                      ? "bg-gray-800/50 border border-gray-700 hover:border-gray-600"
+                      : "bg-gray-50 border border-gray-300 hover:border-gray-400"
+                }`}
               >
-                <option value={5}>5</option>
-                <option value={10}>10</option>
-                <option value={25}>25</option>
-                <option value={50}>50</option>
-              </select>
+                {hasBonus && (
+                  <div className="absolute -top-3 -right-3">
+                    <div className="px-3 py-1 bg-gradient-to-r from-green-500 to-emerald-500 rounded-full text-xs font-bold text-white shadow-lg flex items-center gap-1">
+                      <Star size={12} weight="fill" />
+                      {Math.round((pkg.bonus / parseInt(tokens)) * 100)}% Bonus
+                    </div>
+                  </div>
+                )}
+                
+                <div className="flex justify-between items-start mb-4">
+                  <div>
+                    <p className={`text-3xl font-bold ${theme === "dark" ? "text-white" : "text-gray-900"}`}>
+                      {tokens}
+                    </p>
+                    <p className={`text-sm ${theme === "dark" ? "text-gray-400" : "text-gray-600"}`}>
+                      tokens
+                    </p>
+                    {hasBonus && (
+                      <p className="text-sm text-green-400 mt-1">
+                        +{pkg.bonus} bonus!
+                      </p>
+                    )}
+                  </div>
+                  <p className={`text-2xl font-bold ${
+                    theme === "dark" ? "text-green-400" : "text-green-600"
+                  }`}>
+                    ${pkg.amount}
+                  </p>
+                </div>
+                
+                {isSelected && (
+                  <div className="absolute bottom-2 right-2">
+                    <CheckCircle size={24} weight="fill" className="text-purple-500" />
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+
+        {/* PayPal Buttons */}
+        {selectedTokenPackage && (
+          <div className="max-w-md mx-auto">
+            {isPending && (
+              <div className="text-center py-8">
+                <Spinner size={32} className="animate-spin mx-auto mb-2 text-purple-400" />
+                <p className={theme === "dark" ? "text-gray-400" : "text-gray-600"}>
+                  Loading PayPal...
+                </p>
+              </div>
+            )}
+            
+            {isRejected && (
+              <div className="text-center py-8">
+                <p className="text-red-400">
+                  Error loading PayPal. Please refresh and try again.
+                </p>
+              </div>
+            )}
+            
+            {isResolved && (
+              <div className="space-y-4">
+                <div className={`p-4 rounded-xl text-center ${
+                  theme === "dark" ? "bg-gray-800/50" : "bg-gray-100"
+                }`}>
+                  <p className={`text-sm ${theme === "dark" ? "text-gray-400" : "text-gray-600"}`}>
+                    You're purchasing
+                  </p>
+                  <p className={`text-2xl font-bold ${theme === "dark" ? "text-white" : "text-gray-900"}`}>
+                    {selectedTokenPackage} tokens for ${tokenPackages[selectedTokenPackage].amount}
+                  </p>
+                </div>
+                
+                <PayPalButtons
+                  style={{
+                    shape: "rect",
+                    color: "blue",
+                    layout: "vertical",
+                    label: "pay",
+                  }}
+                  createOrder={handleCreateOrder}
+                  onApprove={handleOnApprove}
+                  onError={handleOnError}
+                  disabled={loading || isCreatingOrder}
+                />
+                
+                {isCreatingOrder && (
+                  <div className="text-center">
+                    <Spinner size={24} className="animate-spin mx-auto text-purple-400" />
+                    <p className={`text-sm mt-2 ${theme === "dark" ? "text-gray-400" : "text-gray-600"}`}>
+                      Preparing payment...
+                    </p>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+        
+        <p className={`text-xs text-center mt-6 ${theme === "dark" ? "text-gray-500" : "text-gray-500"}`}>
+          By purchasing, you agree to our Terms and Refund Policy
+        </p>
+      </div>
+
+      {/* Trade Tokens */}
+      <div className={`mb-12 p-8 rounded-3xl backdrop-blur-xl ${
+        theme === "dark" 
+          ? "bg-white/5 border border-white/10" 
+          : "bg-white/70 border border-gray-200"
+      }`}>
+        <div className="flex items-center gap-3 mb-8">
+          <div className="p-3 rounded-2xl bg-gradient-to-br from-blue-500 to-purple-500 shadow-lg">
+            <Handshake size={28} className="text-white" />
+          </div>
+          <div>
+            <h2 className={`text-2xl font-bold ${theme === "dark" ? "text-white" : "text-gray-900"}`}>
+              Trade Tokens
+            </h2>
+            <p className={`text-sm ${theme === "dark" ? "text-gray-400" : "text-gray-600"}`}>
+              Send tokens to other users
+            </p>
+          </div>
+        </div>
+        
+        <div className="max-w-md mx-auto space-y-4">
+          <div>
+            <label className={`block text-sm font-medium mb-2 ${
+              theme === "dark" ? "text-gray-300" : "text-gray-700"
+            }`}>
+              Recipient Username
+            </label>
+            <div className="relative">
+              <input
+                type="text"
+                value={tradeRecipientUsername}
+                onChange={(e) => setTradeRecipientUsername(e.target.value)}
+                placeholder="Enter username"
+                className={`w-full px-4 py-3 rounded-xl pr-10 ${
+                  theme === "dark" 
+                    ? "bg-gray-800/50 text-white border border-gray-700 focus:border-purple-500" 
+                    : "bg-white text-gray-900 border border-gray-300 focus:border-purple-500"
+                } focus:outline-none focus:ring-2 focus:ring-purple-500/20 transition-all`}
+                disabled={loading}
+              />
+              {tradeRecipientExists !== null && tradeRecipientUsername && (
+                <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
+                  {tradeRecipientExists ? (
+                    <CheckCircle size={20} weight="fill" className="text-green-500" />
+                  ) : (
+                    <div className="w-5 h-5 rounded-full bg-red-500 flex items-center justify-center">
+                      <span className="text-white text-xs font-bold">!</span>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           </div>
           
-          <div className="space-y-2">
-            {isLoadingHistory ? (
-              <div className="text-gray-200 text-center py-8">
-                <Spinner size={32} className="animate-spin mx-auto mb-2" />
-                <p>Loading transactions...</p>
-              </div>
-            ) : transactionHistory.length > 0 ? (
-              transactionHistory.map((tx) => (
-                <div key={tx.id} className="p-3 bg-gray-800 rounded-lg hover:bg-gray-700 transition">
-                  <div className="flex justify-between items-start">
+          <div>
+            <label className={`block text-sm font-medium mb-2 ${
+              theme === "dark" ? "text-gray-300" : "text-gray-700"
+            }`}>
+              Amount
+            </label>
+            <input
+              type="number"
+              value={tradeAmount}
+              onChange={(e) => setTradeAmount(e.target.value)}
+              placeholder="0"
+              className={`w-full px-4 py-3 rounded-xl ${
+                theme === "dark" 
+                  ? "bg-gray-800/50 text-white border border-gray-700 focus:border-purple-500" 
+                  : "bg-white text-gray-900 border border-gray-300 focus:border-purple-500"
+              } focus:outline-none focus:ring-2 focus:ring-purple-500/20 transition-all`}
+              disabled={loading}
+              min="1"
+              max={tokenBalance}
+            />
+            {tradeAmount && parseInt(tradeAmount) > tokenBalance && (
+              <p className="text-red-400 text-sm mt-1">
+                Insufficient balance
+              </p>
+            )}
+          </div>
+          
+          <button
+            onClick={handleTradeTokens}
+            disabled={loading || !tradeRecipientUsername || !tradeAmount || parseInt(tradeAmount) <= 0 || parseInt(tradeAmount) > tokenBalance || !tradeRecipientExists}
+            className={`w-full py-3 px-6 rounded-xl font-medium transition-all flex items-center justify-center gap-2 ${
+              loading || !tradeRecipientUsername || !tradeAmount || parseInt(tradeAmount) <= 0 || parseInt(tradeAmount) > tokenBalance || !tradeRecipientExists 
+                ? theme === "dark"
+                  ? "bg-gray-800 text-gray-500 cursor-not-allowed"
+                  : "bg-gray-200 text-gray-400 cursor-not-allowed"
+                : "bg-gradient-to-r from-blue-500 to-purple-500 text-white hover:shadow-lg hover:scale-105"
+            }`}
+          >
+            {loading ? (
+              <Spinner size={20} className="animate-spin" />
+            ) : (
+              <>
+                Send Tokens
+                <ArrowRight size={20} />
+              </>
+            )}
+          </button>
+        </div>
+      </div>
+
+      {/* Community Features */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-12">
+        {/* Monthly Giveaway */}
+        <div className={`p-8 rounded-3xl backdrop-blur-xl ${
+          theme === "dark" 
+            ? "bg-gradient-to-br from-purple-500/10 to-pink-500/10 border border-purple-500/20" 
+            : "bg-gradient-to-br from-purple-50 to-pink-50 border border-purple-200"
+        }`}>
+          <div className="flex items-center gap-3 mb-4">
+            <div className="p-3 rounded-2xl bg-gradient-to-br from-purple-500 to-pink-500 shadow-lg">
+              <Gift size={24} className="text-white" />
+            </div>
+            <h3 className={`text-xl font-bold ${theme === "dark" ? "text-white" : "text-gray-900"}`}>
+              Monthly Giveaway
+            </h3>
+          </div>
+          <p className={`mb-6 ${theme === "dark" ? "text-gray-400" : "text-gray-600"}`}>
+            Win up to 600 tokens every month! Enter for your chance to win.
+          </p>
+          <button className="w-full py-3 px-6 bg-gradient-to-r from-purple-500 to-pink-500 text-white rounded-xl font-medium hover:shadow-lg hover:scale-105 transition-all">
+            Enter Giveaway
+          </button>
+        </div>
+
+        {/* Referral Program */}
+        <div className={`p-8 rounded-3xl backdrop-blur-xl ${
+          theme === "dark" 
+            ? "bg-gradient-to-br from-yellow-500/10 to-orange-500/10 border border-yellow-500/20" 
+            : "bg-gradient-to-br from-yellow-50 to-orange-50 border border-yellow-200"
+        }`}>
+          <div className="flex items-center gap-3 mb-4">
+            <div className="p-3 rounded-2xl bg-gradient-to-br from-yellow-500 to-orange-500 shadow-lg">
+              <Lightning size={24} className="text-white" />
+            </div>
+            <h3 className={`text-xl font-bold ${theme === "dark" ? "text-white" : "text-gray-900"}`}>
+              Referral Program
+            </h3>
+          </div>
+          <p className={`mb-4 ${theme === "dark" ? "text-gray-400" : "text-gray-600"}`}>
+            Earn 30 tokens for each friend who joins!
+          </p>
+          <div className={`flex items-center gap-2 p-3 rounded-lg ${
+            theme === "dark" ? "bg-gray-800/50" : "bg-gray-100"
+          }`}>
+            <code className={`flex-1 font-mono text-sm ${
+              theme === "dark" ? "text-white" : "text-gray-900"
+            }`}>
+              {referralCode}
+            </code>
+            <button
+              onClick={copyReferralCode}
+              className={`p-2 rounded-lg transition-all ${
+                copiedCode
+                  ? "bg-green-500 text-white"
+                  : theme === "dark"
+                    ? "bg-gray-700 text-gray-300 hover:bg-gray-600"
+                    : "bg-gray-200 text-gray-700 hover:bg-gray-300"
+              }`}
+            >
+              {copiedCode ? <CheckCircle size={20} /> : <Copy size={20} />}
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* Transaction History */}
+      <div className={`p-8 rounded-3xl backdrop-blur-xl ${
+        theme === "dark" 
+          ? "bg-white/5 border border-white/10" 
+          : "bg-white/70 border border-gray-200"
+      }`}>
+        <div className="flex items-center justify-between mb-6">
+          <div className="flex items-center gap-3">
+            <div className="p-3 rounded-2xl bg-gradient-to-br from-gray-500 to-gray-600 shadow-lg">
+              <Clock size={24} className="text-white" />
+            </div>
+            <h2 className={`text-2xl font-bold ${theme === "dark" ? "text-white" : "text-gray-900"}`}>
+              Transaction History
+            </h2>
+          </div>
+          <div className="flex items-center gap-2">
+            <label className={`text-sm ${theme === "dark" ? "text-gray-400" : "text-gray-600"}`}>
+              Show:
+            </label>
+            <select
+              value={transactionsPerPage}
+              onChange={handleTransactionsPerPageChange}
+              className={`px-3 py-1 rounded-lg text-sm ${
+                theme === "dark" 
+                  ? "bg-gray-800 text-white border border-gray-700" 
+                  : "bg-white text-gray-900 border border-gray-300"
+              }`}
+            >
+              <option value={5}>5</option>
+              <option value={10}>10</option>
+              <option value={25}>25</option>
+              <option value={50}>50</option>
+            </select>
+          </div>
+        </div>
+        
+        <div className="space-y-3">
+          {isLoadingHistory ? (
+            <div className="text-center py-12">
+              <Spinner size={32} className="animate-spin mx-auto mb-4 text-purple-400" />
+              <p className={theme === "dark" ? "text-gray-400" : "text-gray-600"}>
+                Loading transactions...
+              </p>
+            </div>
+          ) : transactionHistory.length > 0 ? (
+            transactionHistory.map((tx) => (
+              <div key={tx.id} className={`p-4 rounded-xl transition-all hover:scale-[1.02] ${
+                theme === "dark" 
+                  ? "bg-gray-800/50 hover:bg-gray-800/70" 
+                  : "bg-gray-50 hover:bg-gray-100"
+              }`}>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className={`p-2 rounded-lg ${
+                      tx.type === "purchase" 
+                        ? "bg-green-500/20 text-green-500"
+                        : tx.type === "redemption"
+                          ? "bg-purple-500/20 text-purple-500"
+                          : tx.direction === "sent"
+                            ? "bg-red-500/20 text-red-500"
+                            : "bg-blue-500/20 text-blue-500"
+                    }`}>
+                      {tx.type === "purchase" && <Plus size={20} weight="bold" />}
+                      {tx.type === "redemption" && <CurrencyDollar size={20} />}
+                      {tx.type === "trade" && <Handshake size={20} />}
+                    </div>
                     <div>
-                      <p className="text-gray-200 font-medium">
+                      <p className={`font-medium ${theme === "dark" ? "text-white" : "text-gray-900"}`}>
                         {tx.type === "purchase" && `Purchased ${tx.tokens} tokens`}
                         {tx.type === "redemption" && `Subscribed to ${tx.productId} plan`}
-                        {tx.type === "trade" && tx.direction === "sent" && `Sent ${tx.tokens} tokens to ${tx.receiverUsername || "user"}`}
-                        {tx.type === "trade" && tx.direction === "received" && `Received ${tx.tokens} tokens from ${tx.senderUsername || "user"}`}
+                        {tx.type === "trade" && tx.direction === "sent" && `Sent to ${tx.receiverUsername || "user"}`}
+                        {tx.type === "trade" && tx.direction === "received" && `Received from ${tx.senderUsername || "user"}`}
                       </p>
-                      <p className="text-gray-400 text-sm">
+                      <p className={`text-sm ${theme === "dark" ? "text-gray-400" : "text-gray-600"}`}>
                         {tx.createdAt.toLocaleString("en-US", { 
                           month: "short", 
                           day: "numeric", 
@@ -635,67 +887,43 @@ const [selectedTokenPackage, setSelectedTokenPackage] = useState<"50" | "100" | 
                         })}
                       </p>
                     </div>
-                    <div className="text-right">
-                      {tx.type === "purchase" && (
-                        <span className="text-green-400 font-semibold">+{tx.tokens}</span>
-                      )}
-                      {tx.type === "redemption" && (
-                        <span className="text-red-400 font-semibold">-{tx.tokenCost}</span>
-                      )}
-                      {tx.type === "trade" && tx.direction === "sent" && (
-                        <span className="text-red-400 font-semibold">-{tx.tokens}</span>
-                      )}
-                      {tx.type === "trade" && tx.direction === "received" && (
-                        <span className="text-green-400 font-semibold">+{tx.tokens}</span>
-                      )}
-                    </div>
+                  </div>
+                  <div className="text-right">
+                    <p className={`font-bold text-lg ${
+                      tx.type === "purchase" || (tx.type === "trade" && tx.direction === "received")
+                        ? "text-green-500"
+                        : "text-red-500"
+                    }`}>
+                      {tx.type === "purchase" && `+${tx.tokens}`}
+                      {tx.type === "redemption" && `-${tx.tokenCost}`}
+                      {tx.type === "trade" && tx.direction === "sent" && `-${tx.tokens}`}
+                      {tx.type === "trade" && tx.direction === "received" && `+${tx.tokens}`}
+                    </p>
                   </div>
                 </div>
-              ))
-            ) : (
-              <p className="text-gray-400 text-center py-8">No transactions yet.</p>
-            )}
-          </div>
-          
-          {totalTransactions > 0 && (
-            <Pagination
-              currentPage={currentPage}
-              totalPages={totalPages}
-              onPageChange={setCurrentPage}
-              isLoading={isLoadingHistory}
-              className="mt-6"
-            />
+              </div>
+            ))
+          ) : (
+            <div className="text-center py-12">
+              <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-gray-800/50 flex items-center justify-center">
+                <Clock size={32} className="text-gray-500" />
+              </div>
+              <p className={theme === "dark" ? "text-gray-400" : "text-gray-600"}>
+                No transactions yet
+              </p>
+            </div>
           )}
         </div>
-
-        {/* Community Features */}
-        <div className="p-6 bg-gradient-to-r from-purple-900/50 to-pink-900/50 rounded-xl shadow-xl">
-          <h2 className="text-2xl font-bold mb-6 text-white flex items-center">
-            <Gift size={28} className="mr-2" />
-            Community Features
-          </h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="p-4 bg-black/30 rounded-lg">
-              <h3 className="font-semibold mb-2 text-purple-300">🎁 Monthly Giveaway</h3>
-              <p className="text-gray-300 text-sm mb-3">Win up to 600 tokens every month!</p>
-              <button className="py-2 px-4 bg-purple-600 hover:bg-purple-700 text-white rounded-md text-sm transition">
-                Enter Giveaway
-              </button>
-            </div>
-            
-            <div className="p-4 bg-black/30 rounded-lg">
-              <h3 className="font-semibold mb-2 text-pink-300">💝 Referral Program</h3>
-              <p className="text-gray-300 text-sm mb-1">Your code: <span className="font-mono bg-gray-800 px-2 py-1 rounded">{referralCode}</span></p>
-              <p className="text-gray-400 text-xs mb-3">Earn 30 tokens for each friend who joins!</p>
-              <button 
-                onClick={() => navigator.clipboard.writeText(referralCode)}
-                className="py-2 px-4 bg-pink-600 hover:bg-pink-700 text-white rounded-md text-sm transition"
-              >
-                Copy Code
-              </button>
-            </div>
-          </div>
-        </div>
+        
+        {totalTransactions > 0 && (
+          <Pagination
+            currentPage={currentPage}
+            totalPages={totalPages}
+            onPageChange={setCurrentPage}
+            isLoading={isLoadingHistory}
+            className="mt-6"
+          />
+        )}
       </div>
     </div>
   );

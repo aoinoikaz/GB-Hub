@@ -103,11 +103,12 @@ const AuthAction = () => {
         throw new Error("Username not found for user");
       }
 
-      await auth.signOut();
-
       console.log("Calling syncEmbyPassword with:", { username, newPassword });
       const syncEmbyPassword = httpsCallable(functions, "syncEmbyPassword");
       await syncEmbyPassword({ username, newPassword });
+
+      // Sign out AFTER syncing the password
+      await auth.signOut();
 
       setMessage("✅ Password reset successful! You can now sign in.");
       setActionCompleted(true);

@@ -344,7 +344,7 @@ const Layout = ({ children }: LayoutProps) => {
         </div>
 
         {/* Page Content */}
-        <div className="relative min-h-[calc(100vh-4rem)]">
+        <div className="relative min-h-[calc(100vh-4rem)] pb-20 md:pb-0">
           {children}
         </div>
       </main>

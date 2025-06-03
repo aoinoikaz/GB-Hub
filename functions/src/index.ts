@@ -41,10 +41,10 @@ const JELLYSEERR_URL = "https://request-media.gondolabros.com"
 const BUCKET = admin.storage().bucket();
 
 const SUBSCRIPTION_PLANS: { [key: string]: SubscriptionPlan } = {
-  standard: { monthly: 60, yearly: 600 },
-  duo: { monthly: 80, yearly: 800 },
-  family: { monthly: 120, yearly: 1200 },
-  ultimate: { monthly: 250, yearly: 2500 },
+  standard: { monthly: 60 },
+  duo: { monthly: 80 },
+  family: { monthly: 120 },
+  ultimate: { monthly: 250 },
 };
 
 const VALID_MAGIC_BYTES: { [key: string]: number[] } = {
@@ -155,7 +155,6 @@ interface ProcessSubscriptionResponse {
 
 interface SubscriptionPlan {
   monthly: number;
-  yearly: number;
 }
 
 interface CheckSubscriptionStatusData {
@@ -1390,7 +1389,7 @@ exports.processSubscription = onCall<ProcessSubscriptionData, Promise<ProcessSub
 
     try {
       const plan = SUBSCRIPTION_PLANS[planId];
-      const baseTokenCost = billingPeriod === "monthly" ? plan.monthly : plan.yearly;
+      const baseTokenCost = plan.monthly;
       let totalTokenCost = baseTokenCost * duration;
 
       // Check if there's an active subscription
@@ -1449,8 +1448,7 @@ exports.processSubscription = onCall<ProcessSubscriptionData, Promise<ProcessSub
             
             // Calculate prorated amount
             const currentPlanData = SUBSCRIPTION_PLANS[currentPlanId];
-            const currentPlanTokens = activeSub.billingPeriod === "monthly" ? 
-              currentPlanData.monthly : currentPlanData.yearly;
+            const currentPlanTokens = currentPlanData.monthly
             const usedTokens = Math.floor((currentPlanTokens * usedDays) / totalDays);
             proRateCredit = currentPlanTokens - usedTokens;
             

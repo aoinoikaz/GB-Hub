@@ -1,4 +1,4 @@
-// src/components/MediaDashboard.tsx - Complete Fixed Version
+// src/components/MediaDashboard.tsx - Monthly Subscriptions Only
 
 import { useState, useEffect } from "react";
 import { doc, getDoc } from "firebase/firestore";
@@ -41,7 +41,6 @@ interface SubscriptionPlan {
   id: string;
   name: string;
   monthlyTokens: number;
-  yearlyTokens: number;
   features: {
     streams: number;
     downloads: boolean;
@@ -60,7 +59,6 @@ const subscriptionPlans: SubscriptionPlan[] = [
     id: "standard",
     name: "Standard",
     monthlyTokens: 60,
-    yearlyTokens: 600,
     features: {
       streams: 1,
       downloads: true,
@@ -76,7 +74,6 @@ const subscriptionPlans: SubscriptionPlan[] = [
     id: "duo",
     name: "Duo",
     monthlyTokens: 80,
-    yearlyTokens: 800,
     features: {
       streams: 2,
       downloads: true,
@@ -93,7 +90,6 @@ const subscriptionPlans: SubscriptionPlan[] = [
     id: "family",
     name: "Family",
     monthlyTokens: 120,
-    yearlyTokens: 1200,
     features: {
       streams: 4,
       downloads: true,
@@ -109,7 +105,6 @@ const subscriptionPlans: SubscriptionPlan[] = [
     id: "ultimate",
     name: "Ultimate",
     monthlyTokens: 250,
-    yearlyTokens: 2500,
     features: {
       streams: 10,
       downloads: true,
@@ -179,7 +174,6 @@ const MediaDashboard = () => {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [selectedPlan, setSelectedPlan] = useState<string | null>(null);
-  const [billingPeriod, setBillingPeriod] = useState<"monthly" | "yearly">("monthly");
   const [redeeming, setRedeeming] = useState(false);
   const [showBoosterPacks, setShowBoosterPacks] = useState(false);
   const [purchasingBooster, setPurchasingBooster] = useState<string | null>(null);
@@ -275,7 +269,7 @@ const MediaDashboard = () => {
     if (!selectedPlan) return 0;
     const plan = subscriptionPlans.find((p) => p.id === selectedPlan);
     if (!plan) return 0;
-    return billingPeriod === "monthly" ? plan.monthlyTokens : plan.yearlyTokens;
+    return plan.monthlyTokens;
   };
 
   const calculateProrate = () => {
@@ -292,7 +286,7 @@ const MediaDashboard = () => {
     const remainingDays = Math.ceil((endDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
     const usedDays = totalDays - remainingDays;
     
-    const currentPlanTokens = activeSubscription.billingPeriod === "monthly" ? currentPlanData.monthlyTokens : currentPlanData.yearlyTokens;
+    const currentPlanTokens = currentPlanData.monthlyTokens;
     const usedTokens = Math.floor((currentPlanTokens * usedDays) / totalDays);
     const unusedTokens = currentPlanTokens - usedTokens;
     
@@ -330,7 +324,7 @@ const MediaDashboard = () => {
       const result = await processSubscription({
         userId: user.uid,
         planId: selectedPlan,
-        billingPeriod,
+        billingPeriod: "monthly", // ALWAYS MONTHLY NOW
         duration: 1,
         autoRenew: !activeSubscription ? autoRenewEnabled : activeSubscription.autoRenew,
       });
@@ -528,7 +522,7 @@ const MediaDashboard = () => {
                                     {subscriptionPlans.find(p => p.id === currentPlan)?.name} Plan
                                   </h3>
                                   <p className="text-sm text-gray-400">
-                                    {activeSubscription.billingPeriod}ly subscription
+                                    Monthly subscription
                                   </p>
                                 </div>
                               </div>
@@ -731,33 +725,6 @@ const MediaDashboard = () => {
                     {activeSubscription ? "Switch to a better plan anytime" : "Start streaming thousands of titles"}
                   </p>
                 </div>
-                
-                {/* Billing Toggle */}
-                <div className="flex justify-center mb-8">
-                  <div className="inline-flex p-1 bg-gray-800/50 rounded-2xl backdrop-blur-sm">
-                    <button
-                      onClick={() => setBillingPeriod("monthly")}
-                      className={`px-6 py-3 rounded-xl font-medium transition-all ${
-                        billingPeriod === "monthly"
-                          ? "bg-gradient-to-r from-purple-500 to-pink-500 text-white shadow-lg"
-                          : "text-gray-400 hover:text-white"
-                      }`}
-                    >
-                      Monthly
-                    </button>
-                    <button
-                      onClick={() => setBillingPeriod("yearly")}
-                      className={`px-6 py-3 rounded-xl font-medium transition-all flex items-center gap-2 ${
-                        billingPeriod === "yearly"
-                          ? "bg-gradient-to-r from-purple-500 to-pink-500 text-white shadow-lg"
-                          : "text-gray-400 hover:text-white"
-                      }`}
-                    >
-                      Yearly
-                      <span className="text-xs px-2 py-0.5 bg-green-500/20 rounded-full text-green-400">Save 20%</span>
-                    </button>
-                  </div>
-                </div>
 
                 {/* Plans Grid */}
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
@@ -824,16 +791,11 @@ const MediaDashboard = () => {
                           {/* Price */}
                           <div className="mb-6">
                             <p className="text-3xl font-bold text-white">
-                              {billingPeriod === "monthly" ? plan.monthlyTokens : plan.yearlyTokens}
+                              {plan.monthlyTokens}
                             </p>
                             <p className="text-sm text-gray-400">
-                              tokens/{billingPeriod === "monthly" ? "month" : "year"}
+                              tokens/month
                             </p>
-                            {billingPeriod === "yearly" && (
-                              <p className="text-xs text-green-400 mt-1">
-                                Save {plan.monthlyTokens * 12 - plan.yearlyTokens} tokens
-                              </p>
-                            )}
                           </div>
                           
                           {/* Features */}
@@ -897,7 +859,7 @@ const MediaDashboard = () => {
                               <p className="font-semibold text-white">
                                 {subscriptionPlans.find(p => p.id === selectedPlan)?.name} Plan
                               </p>
-                              <p className="text-sm text-gray-400">{billingPeriod}ly billing</p>
+                              <p className="text-sm text-gray-400">Monthly billing</p>
                             </div>
                           </div>
                           <div className="text-right">

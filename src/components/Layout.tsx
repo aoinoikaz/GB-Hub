@@ -306,22 +306,7 @@ const Layout = ({ children }: LayoutProps) => {
             </h2>
           </div>
           <div className="flex items-center gap-4">
-            {/* Status Indicator in Top Bar */}
-            <a 
-              href="https://status.gondolabros.com/"
-              target="_blank"
-              rel="noopener noreferrer"
-              className={`hidden lg:flex items-center gap-2 px-3 py-1.5 rounded-lg transition-colors ${
-                theme === "dark"
-                  ? "bg-green-500/10 hover:bg-green-500/20 border border-green-500/20"
-                  : "bg-green-50 hover:bg-green-100 border border-green-200"
-              }`}
-            >
-              <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
-              <span className={`text-xs font-medium ${
-                theme === "dark" ? "text-green-400" : "text-green-700"
-              }`}>All Systems Operational</span>
-            </a>
+            
             
             <button className={`p-2 rounded-lg transition-colors ${
               theme === "dark" 

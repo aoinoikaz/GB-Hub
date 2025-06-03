@@ -873,20 +873,20 @@ const MediaDashboard = () => {
                               ? "bg-gray-800/80 border-white/10 hover:border-white/20"
                               : "bg-white border-gray-200 hover:border-gray-300"
                         }`}>
-                          {/* Badges */}
+                          {/* Badges - positioned inside the card */}
                           {plan.popular && !isCurrentPlan && (
-                            <div className="absolute -top-3 -right-3 px-3 py-1 bg-gradient-to-r from-purple-500 to-pink-500 rounded-full text-xs font-medium text-white shadow-lg">
+                            <div className="absolute top-6 right-6 px-3 py-1 bg-gradient-to-r from-purple-500 to-pink-500 rounded-full text-xs font-medium text-white shadow-lg">
                               Popular
                             </div>
                           )}
                           {isCurrentPlan && (
-                            <div className="absolute -top-3 -right-3 px-3 py-1 bg-green-500 rounded-full text-xs font-medium text-white shadow-lg flex items-center gap-1">
+                            <div className="absolute top-6 right-6 px-3 py-1 bg-green-500 rounded-full text-xs font-medium text-white shadow-lg flex items-center gap-1">
                               <Check size={12} weight="bold" />
                               Current
                             </div>
                           )}
                           {isLowerTier && (
-                            <div className={`absolute -top-3 -right-3 px-3 py-1 rounded-full text-xs font-medium ${
+                            <div className={`absolute top-6 right-6 px-3 py-1 rounded-full text-xs font-medium ${
                               theme === "dark"
                                 ? "bg-gray-600 text-gray-300"
                                 : "bg-gray-400 text-white"
@@ -920,7 +920,7 @@ const MediaDashboard = () => {
                           </div>
                           
                           {/* Features */}
-                          <ul className="space-y-3 text-sm">
+                          <ul className="space-y-3 text-sm mb-6">
                             <li className={`flex items-center gap-2 ${
                               theme === "dark" ? "text-gray-300" : "text-gray-700"
                             }`}>
@@ -945,10 +945,17 @@ const MediaDashboard = () => {
                               <Television size={16} className={theme === "dark" ? "text-gray-400" : "text-gray-500"} />
                               <span>{plan.features.tvRequests} TV request{plan.features.tvRequests !== 1 ? "s" : ""}</span>
                             </li>
-                            {plan.features.support === "priority" && (
+                            {plan.features.support === "priority" ? (
                               <li className="flex items-center gap-2 text-yellow-400">
-                                <Headphones size={16} />
+                                <Lightning size={16} weight="fill" />
                                 <span className="font-medium">Priority support</span>
+                              </li>
+                            ) : (
+                              <li className={`flex items-center gap-2 ${
+                                theme === "dark" ? "text-gray-300" : "text-gray-700"
+                              }`}>
+                                <Headphones size={16} className={theme === "dark" ? "text-gray-400" : "text-gray-500"} />
+                                <span>Standard support</span>
                               </li>
                             )}
                           </ul>

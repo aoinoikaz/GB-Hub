@@ -427,7 +427,7 @@ class AccountServiceManager {
       username,
       normalizedUsername,
       createdAt: admin.firestore.FieldValue.serverTimestamp(),
-      services: {} as { [key: string]: { linked: boolean; serviceUserId: string; subscriptionStatus: string } },
+      services: {} as { [key: string]: { serviceUserId: string } },
     };
 
     const usersSnapshot = await admin.firestore().collection("users").where("normalizedUsername", "==", normalizedUsername).get();

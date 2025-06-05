@@ -444,9 +444,6 @@ class AccountServiceManager {
     for (const serviceName of servicesToCreate) {
       const serviceUserId = await this.services[serviceName].createUser(email, username, normalizedUsername, password);
       userData.services[serviceName] = {
-        linked: true,
-        serviceUserId: serviceUserId,
-        subscriptionStatus: "inactive",
       };
     }
 
@@ -1864,15 +1861,11 @@ exports.activateEmbyAccount = onCall(async (request) => {
     const userData = userDoc.data();
     const embyService = userData?.services?.emby;
 
-    if (!embyService?.linked || !embyService?.serviceUserId) {
-      throw new HttpsError("failed-precondition", "Emby account is not linked.");
+    if (!embyService?.serviceUserId) {
+      throw new HttpsError("failed-precondition", "Emby account is not set up.");
     }
 
     await accountServiceManager.enableUser("emby", embyService.serviceUserId);
-
-    await userRef.update({
-      "services.emby.subscriptionStatus": "active",
-    });
 
     return { success: true, message: "Emby account activated successfully." };
   } catch (error: unknown) {

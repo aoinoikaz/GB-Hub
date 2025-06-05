@@ -440,7 +440,7 @@ class AccountServiceManager {
       throw new HttpsError("already-exists", "Username is already taken in Emby");
     }
 
-    const servicesToCreate = Object.keys(this.services).filter((serviceName) => !userData.services?.[serviceName]?.linked);
+    const servicesToCreate = Object.keys(this.services).filter((serviceName) => !userData.services?.[serviceName]?.serviceUserId);
     for (const serviceName of servicesToCreate) {
       const serviceUserId = await this.services[serviceName].createUser(email, username, normalizedUsername, password);
       userData.services[serviceName] = {

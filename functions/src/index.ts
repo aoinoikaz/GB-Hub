@@ -444,6 +444,7 @@ class AccountServiceManager {
     for (const serviceName of servicesToCreate) {
       const serviceUserId = await this.services[serviceName].createUser(email, username, normalizedUsername, password);
       userData.services[serviceName] = {
+        serviceUserId: serviceUserId,
       };
     }
 

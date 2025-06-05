@@ -31,8 +31,6 @@ async function getSecretsConfig() {
   return secretsConfig;
 }
 
-
-
 // Determine if we're in sandbox mode (you can set this via environment variable)
 const IS_PAYPAL_SANDBOX = process.env.PAYPAL_SANDBOX === 'true';
 

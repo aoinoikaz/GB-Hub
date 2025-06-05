@@ -244,7 +244,7 @@ const MediaDashboard = () => {
           const data = userSnap.data();
           setTokenBalance(data.tokenBalance || 0);
           const embyService = data.services?.emby;
-          if (embyService?.linked) {
+          if (embyService?.serviceUserId) {
             setIsLinked(true);
             setUsername(user.displayName || "Not set");
             await checkSubscriptionStatus();

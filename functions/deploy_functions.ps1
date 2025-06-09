@@ -7,7 +7,7 @@ $ErrorActionPreference = "Stop"
 $PROJECT_ID = "gondola-bros-hub"
 $REGION = "us-central1"
 $RUNTIME = "nodejs22"
-$SOURCE_DIR = "C:\repos\gbhub\functions"
+$SOURCE_DIR = "C:\GitHub\GB-Hub\functions"
 $SERVICE_ACCOUNT = "cloud-functions-runtime@gondola-bros-hub.iam.gserviceaccount.com"
 $BUILD_SERVICE_ACCOUNT = "projects/gondola-bros-hub/serviceAccounts/cloud-functions-build@gondola-bros-hub.iam.gserviceaccount.com"
 

@@ -36,7 +36,8 @@ $functions = @(
     "uploadProfileImage",
     "checkUsername",
     "toggleAutoRenew",
-    "getJellyseerrQuotas"
+    "getJellyseerrQuotas",
+    "processAutoRenewals"
 )
 
 # Common deployment parameters
@@ -132,49 +133,5 @@ Write-ColorOutput Cyan "- Check function status: gcloud functions list --project
 Write-ColorOutput Cyan "- Test a function: gcloud functions call FUNCTION_NAME --project=$PROJECT_ID"
 
 Write-ColorOutput Green "`nDeployment script completed!"
-
-# Deploy scheduler function separately
-Write-ColorOutput Yellow "`n=========================================="
-Write-ColorOutput Yellow "Deploying Scheduler Function"
-Write-ColorOutput Yellow "=========================================="
-
-Write-ColorOutput Yellow "Deploying processAutoRenewals (scheduled function)..."
-
-try {
-    $schedulerCommand = @"
-gcloud functions deploy processAutoRenewals `
-    --gen2 `
-    --runtime=$RUNTIME `
-    --region=$REGION `
-    --source=$SOURCE_DIR `
-    --entry-point=processAutoRenewals `
-    --trigger-schedule="0 0 * * *" `
-    --project=$PROJECT_ID `
-    --service-account=$SERVICE_ACCOUNT `
-    --set-env-vars=GCLOUD_PROJECT=$PROJECT_ID
-"@
-
-    Invoke-Expression $schedulerCommand
-    
-    if ($LASTEXITCODE -eq 0) {
-        Write-ColorOutput Green "processAutoRenewals deployed successfully!`n"
-        Write-ColorOutput Cyan "Scheduler will run daily at midnight UTC"
-    }
-    else {
-        throw "Scheduler deployment failed with exit code $LASTEXITCODE"
-    }
-}
-catch {
-    Write-ColorOutput Red "Failed to deploy processAutoRenewals: $_`n"
-    Write-ColorOutput Yellow "To manually deploy the scheduler, run:"
-    Write-ColorOutput Cyan $schedulerCommand
-}
-
-# Update the summary to include scheduler
-Write-ColorOutput Yellow "`n=========================================="
-Write-ColorOutput Yellow "Final Deployment Summary"
-Write-ColorOutput Yellow "=========================================="
-Write-ColorOutput Green "HTTP Functions deployed: $successCount/$($functions.Count)"
-Write-ColorOutput Green "Scheduler Functions: Check above for status"
 
 Read-Host -Prompt "`nPress Enter to exit"

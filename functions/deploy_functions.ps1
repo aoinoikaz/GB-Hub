@@ -36,7 +36,7 @@ $functions = @(
     "uploadProfileImage",
     "checkUsername",
     "toggleAutoRenew",
-    "processAutoRenewals"
+    "getJellyseerrQuotas"
 )
 
 # Common deployment parameters

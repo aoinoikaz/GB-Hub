@@ -39,10 +39,9 @@ const JELLYSEERR_URL = "https://request-media.gondolabros.com"
 const BUCKET = admin.storage().bucket();
 
 const SUBSCRIPTION_PLANS: { [key: string]: SubscriptionPlan } = {
-  standard: { monthly: 60 },
-  duo: { monthly: 80 },
-  family: { monthly: 120 },
-  ultimate: { monthly: 250 },
+  basic: { monthly: 70 },
+  duo: { monthly: 120 },
+  family: { monthly: 200 },
 };
 
 const VALID_MAGIC_BYTES: { [key: string]: number[] } = {

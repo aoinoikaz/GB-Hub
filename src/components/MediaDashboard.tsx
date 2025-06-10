@@ -1,5 +1,3 @@
-// src/components/MediaDashboard.tsx - Monthly Subscriptions Only
-
 import { useState, useEffect } from "react";
 import { doc, getDoc } from "firebase/firestore";
 import { db } from "../config/firebase";
@@ -14,7 +12,6 @@ import { getFunctions, httpsCallable } from "firebase/functions";
 import { useNavigate } from "react-router-dom";
 import { useTheme } from "../context/theme-context";
 
-// Interfaces
 interface ProcessSubscriptionResponse {
   success: boolean;
   subscriptionId: string;

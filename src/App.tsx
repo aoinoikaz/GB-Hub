@@ -1,6 +1,5 @@
 // src/App.tsx - Fixed route structure
 import { Routes, Route } from "react-router-dom";
-//import { useState, useEffect } from "react";
 import Home from "./Home";
 import Auth from "./components/auth/Auth";
 import AuthAction from "./components/auth/AuthAction";

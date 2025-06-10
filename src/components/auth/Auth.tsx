@@ -81,6 +81,7 @@ const Auth = () => {
 
       setCurrentPanel("signin");
       navigate("/dashboard");
+      
     } catch (err: any) {
       setError("Setup failed. Please try again.");
       console.error("Setup error:", err);

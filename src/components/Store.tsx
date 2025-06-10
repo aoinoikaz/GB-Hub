@@ -244,10 +244,10 @@ const Store = () => {
   const tokenPackages = {
     "70": { amount: "7.00", currency: "USD", bonus: 0 },
     "120": { amount: "12.00", currency: "USD", bonus: 0 },
-    "200": { amount: "20.00", currency: "USD", bonus: 10 },
-    "300": { amount: "30.00", currency: "USD", bonus: 15 },
-    "1200": { amount: "120.00", currency: "USD", bonus: 96 },
-    "2500": { amount: "250.00", currency: "USD", bonus: 250 },
+    "200": { amount: "20.00", currency: "USD", bonus: 0 },
+    "300": { amount: "30.00", currency: "USD", bonus: 0 },
+    "1200": { amount: "120.00", currency: "USD", bonus: 0 },
+    "2500": { amount: "250.00", currency: "USD", bonus: 0 },
   };
 
   const handleCreateOrder = async (_data: any, actions: CustomCreateOrderActions) => {

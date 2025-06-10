@@ -5,10 +5,10 @@ import { doc, getDoc } from "firebase/firestore";
 import { db } from "../config/firebase";
 import { useAuth } from "../context/auth-context";
 import { 
-  Info, Spinner, FilmSlate, Television, Users, Crown,
+  Info, Spinner, FilmSlate, Television, Users,
   Check, X, Rocket, Lightning, Warning, CheckCircle, Clock, 
   CreditCard, ArrowRight, Sparkle, Gift,
-  VideoCamera, Headphones, Monitor, CloudArrowDown, Coins
+  Headphones, Monitor, CloudArrowDown, Coins
 } from "phosphor-react";
 import { getFunctions, httpsCallable } from "firebase/functions";
 import { useNavigate } from "react-router-dom";
@@ -57,29 +57,29 @@ interface SubscriptionPlan {
 
 const subscriptionPlans: SubscriptionPlan[] = [
   {
-    id: "standard",
-    name: "Standard",
-    monthlyTokens: 60,
+    id: "basic",
+    name: "Basic",
+    monthlyTokens: 70,
     features: {
       streams: 1,
-      downloads: true,
+      downloads: false,
       movieRequests: 1,
       tvRequests: 1,
       support: "standard",
     },
-    icon: <VideoCamera size={24} />,
-    color: "emerald",
-    gradient: "from-emerald-500 to-green-500",
+    icon: <Monitor size={24} />,
+    color: "gray",
+    gradient: "from-gray-500 to-gray-600",
   },
   {
     id: "duo",
     name: "Duo",
-    monthlyTokens: 80,
+    monthlyTokens: 120,
     features: {
       streams: 2,
       downloads: true,
       movieRequests: 2,
-      tvRequests: 1,
+      tvRequests: 2,
       support: "standard",
     },
     icon: <Users size={24} />,
@@ -90,32 +90,17 @@ const subscriptionPlans: SubscriptionPlan[] = [
   {
     id: "family",
     name: "Family",
-    monthlyTokens: 120,
+    monthlyTokens: 200,
     features: {
-      streams: 4,
+      streams: 5,
       downloads: true,
-      movieRequests: 4,
-      tvRequests: 2,
-      support: "standard",
+      movieRequests: 5,
+      tvRequests: 5,
+      support: "priority",
     },
     icon: <Users size={24} />,
     color: "purple",
     gradient: "from-purple-500 to-pink-500",
-  },
-  {
-    id: "ultimate",
-    name: "Ultimate",
-    monthlyTokens: 250,
-    features: {
-      streams: 10,
-      downloads: true,
-      movieRequests: 10,
-      tvRequests: 5,
-      support: "priority",
-    },
-    icon: <Crown size={24} />,
-    color: "yellow",
-    gradient: "from-yellow-500 to-orange-500",
   },
 ];
 

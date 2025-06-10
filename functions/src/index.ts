@@ -1659,9 +1659,6 @@ exports.toggleAutoRenew = onCall(async (request) => {
 });
 
 
-
-
-
 // Updated checkSubscriptionStatus (remove downgrade logic)
 exports.checkSubscriptionStatus = onCall<CheckSubscriptionStatusData, Promise<CheckSubscriptionStatusResponse>>(
   async (request) => {
@@ -1994,6 +1991,7 @@ exports.uploadProfileImage = onCall<UploadProfileImageData>(async (request) => {
   }
 });
 
+
 exports.getJellyseerrQuotas = onCall<GetJellyseerrQuotasData, Promise<GetJellyseerrQuotasResponse>>(
   async (request) => {
     const { userId } = request.data;
@@ -2072,6 +2070,8 @@ exports.getJellyseerrQuotas = onCall<GetJellyseerrQuotasData, Promise<GetJellyse
       }
 
       const userInfo = await userInfoResponse.json();
+
+      console.log('Jellyseerr user info:', JSON.stringify(userInfo, null, 2));
       
       // Get quota info from user data
       const movieQuotaLimit = userInfo.movieQuotaLimit || 0;
@@ -2121,7 +2121,8 @@ exports.getJellyseerrQuotas = onCall<GetJellyseerrQuotasData, Promise<GetJellyse
         if (req.type === 'movie' && requestDate > movieCutoff) {
           movieUsed++;
         } else if (req.type === 'tv' && requestDate > tvCutoff) {
-          tvUsed++;
+          // Count seasons, not shows - Jellyseerr counts each season as 1 request
+          tvUsed += req.seasons?.length || 1;
         }
       });
 

@@ -1,4 +1,5 @@
 import { onCall, HttpsError } from "firebase-functions/v2/https";
+//import { onSchedule } from "firebase-functions/v2/scheduler";
 import * as admin from "firebase-admin";
 import * as fs from "fs";
 import * as path from "path";
@@ -1637,6 +1638,9 @@ exports.toggleAutoRenew = onCall(async (request) => {
     throw new HttpsError("internal", "Failed to update auto-renewal status.");
   }
 });
+
+
+
 
 
 // Updated checkSubscriptionStatus (remove downgrade logic)

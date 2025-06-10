@@ -1,5 +1,6 @@
 // src/App.tsx - Fixed route structure
 import { Routes, Route } from "react-router-dom";
+import { useState, useEffect } from "react";
 import Home from "./Home";
 import Auth from "./components/auth/Auth";
 import AuthAction from "./components/auth/AuthAction";
@@ -13,6 +14,38 @@ import Tips from "./components/Tips";
 import Leaderboard from "./components/Leaderboard";
 
 const App = () => {
+  // LAUNCH COUNTDOWN - Remove this after launch!
+  const launchTime = new Date("2025-06-10T21:00:00-05:00"); // 9 PM EST
+  const [timeLeft, setTimeLeft] = useState(launchTime.getTime() - new Date().getTime());
+  
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setTimeLeft(launchTime.getTime() - new Date().getTime());
+    }, 1000);
+    
+    return () => clearInterval(timer);
+  }, []);
+  
+  if (timeLeft > 0) {
+    const hours = Math.floor(timeLeft / (1000 * 60 * 60));
+    const minutes = Math.floor((timeLeft % (1000 * 60 * 60)) / (1000 * 60));
+    const seconds = Math.floor((timeLeft % (1000 * 60)) / 1000);
+    
+    return (
+      <div className="min-h-screen bg-black flex items-center justify-center">
+        <div className="text-center">
+          <h1 className="text-6xl font-bold bg-gradient-to-r from-purple-400 to-pink-400 bg-clip-text text-transparent mb-8">
+            Launching Soon
+          </h1>
+          <div className="text-4xl text-white font-mono">
+            {hours.toString().padStart(2, '0')}:{minutes.toString().padStart(2, '0')}:{seconds.toString().padStart(2, '0')}
+          </div>
+          <p className="text-gray-400 mt-8">January 9th, 9:00 PM EST</p>
+        </div>
+      </div>
+    );
+  }
+  
   return (
     <Routes>
       {/* Public Routes */}

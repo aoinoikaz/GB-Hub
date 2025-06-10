@@ -682,10 +682,9 @@ async function updateJellyseerrRequestLimits(
     limits = customLimits;
   } else {
     const planLimits: { [key: string]: { movieLimit: number; tvLimit: number } } = {
-      standard: { movieLimit: 1, tvLimit: 1 },
-      duo: { movieLimit: 2, tvLimit: 1 },
-      family: { movieLimit: 4, tvLimit: 2 },
-      ultimate: { movieLimit: 10, tvLimit: 5 },
+      basic: { movieLimit: 1, tvLimit: 1 },
+      duo: { movieLimit: 2, tvLimit: 2 },
+      family: { movieLimit: 5, tvLimit: 5 },
     };
 
     limits = planLimits[planId];

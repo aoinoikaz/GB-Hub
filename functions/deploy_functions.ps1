@@ -177,5 +177,4 @@ Write-ColorOutput Yellow "=========================================="
 Write-ColorOutput Green "HTTP Functions deployed: $successCount/$($functions.Count)"
 Write-ColorOutput Green "Scheduler Functions: Check above for status"
 
-
 Read-Host -Prompt "`nPress Enter to exit"

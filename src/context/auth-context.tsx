@@ -60,20 +60,13 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const updateProfile = async (data: { displayName?: string; photoURL?: string }) => {
     if (user) {
       try {
-        // Update the Firebase user profile
         await updateUserProfile(user, data);
-        
-        // Force a complete re-authentication of the current user
-        const unsubscribe = onAuthStateChanged(auth, (firebaseUser) => {
-          if (firebaseUser) {
-            const authUser: AuthUser = Object.create(firebaseUser);
-            authUser.role = "user";
-            setUser(authUser);
-          }
-          // Immediately unsubscribe after getting the update
-          unsubscribe();
-        });
-        
+        const updatedUser = auth.currentUser;
+        if (updatedUser) {
+          const authUser: AuthUser = Object.create(updatedUser);
+          authUser.role = "user";
+          setUser(authUser);
+        }
         console.log("[AuthContext] Profile updated:", data);
       } catch (error) {
         console.error("[AuthContext] Update profile error:", error);
@@ -83,7 +76,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       throw new Error("No user logged in to update profile");
     }
   };
-  
+
   // Better loading screen
   if (loading) {
     return (

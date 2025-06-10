@@ -261,6 +261,25 @@ const MediaDashboard = () => {
     fetchUserData();
   }, [user, authLoading]);
 
+  // Fetch quota data on mount and when subscription changes
+  useEffect(() => {
+    if (activeSubscription && isLinked) {
+      fetchQuotaData();
+    }
+  }, [activeSubscription, isLinked, user]);
+
+  // Refresh quota data when user returns to tab
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible' && activeSubscription && isLinked && !quotaLoading) {
+        console.log('Tab became visible, refreshing quota data...');
+        fetchQuotaData();
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
+  }, [activeSubscription, isLinked, quotaLoading]);
+
   const calculateTokenCost = () => {
     if (!selectedPlan) return 0;
     const plan = subscriptionPlans.find((p) => p.id === selectedPlan);
@@ -655,6 +674,20 @@ const MediaDashboard = () => {
                             </div>
                           </div>
 
+                          {/* Refresh button */}
+                          {quotaData && (
+                            <button
+                              onClick={fetchQuotaData}
+                              disabled={quotaLoading}
+                              className={`text-xs flex items-center gap-1 mb-2 ${
+                                theme === "dark" ? "text-gray-400 hover:text-gray-300" : "text-gray-600 hover:text-gray-700"
+                              } ${quotaLoading ? "opacity-50 cursor-not-allowed" : ""}`}
+                            >
+                              <ArrowRight size={12} className={quotaLoading ? "animate-spin" : ""} />
+                              {quotaLoading ? "Refreshing..." : "Refresh usage"}
+                            </button>
+                          )}
+
                           {/* Request Usage */}
                           <div className="grid grid-cols-2 gap-4 mb-6">
                             <div className={`p-5 rounded-2xl border backdrop-blur-sm ${
@@ -670,16 +703,45 @@ const MediaDashboard = () => {
                                     : "bg-orange-200 text-orange-700"
                                 }`}>Movies</span>
                               </div>
-                              <p className={`text-3xl font-bold mb-1 ${
-                                theme === "dark" ? "text-white" : "text-gray-900"
-                              }`}>
-                                {(subscriptionPlans.find(p => p.id === currentPlan)?.features.movieRequests || 0) - (activeSubscription.movieRequestsUsed || 0)}
-                              </p>
-                              <p className={`text-xs ${
-                                theme === "dark" ? "text-gray-400" : "text-gray-600"
-                              }`}>
-                                of {subscriptionPlans.find(p => p.id === currentPlan)?.features.movieRequests || 0} available
-                              </p>
+                              {quotaLoading ? (
+                                <div className="animate-pulse">
+                                  <div className="h-8 bg-gray-700/50 rounded mb-2 w-16"></div>
+                                  <div className="h-3 bg-gray-700/50 rounded w-24"></div>
+                                </div>
+                              ) : quotaData ? (
+                                <>
+                                  <p className={`text-3xl font-bold mb-1 ${
+                                    theme === "dark" ? "text-white" : "text-gray-900"
+                                  }`}>
+                                    {quotaData.movieRemaining}
+                                  </p>
+                                  <p className={`text-xs ${
+                                    theme === "dark" ? "text-gray-400" : "text-gray-600"
+                                  }`}>
+                                    of {quotaData.movieLimit} available
+                                  </p>
+                                  {quotaData.movieDaysToReset > 0 && (
+                                    <p className={`text-xs mt-1 ${
+                                      theme === "dark" ? "text-gray-500" : "text-gray-500"
+                                    }`}>
+                                      Resets in {quotaData.movieDaysToReset} days
+                                    </p>
+                                  )}
+                                </>
+                              ) : (
+                                <>
+                                  <p className={`text-3xl font-bold mb-1 ${
+                                    theme === "dark" ? "text-white" : "text-gray-900"
+                                  }`}>
+                                    {subscriptionPlans.find(p => p.id === currentPlan)?.features.movieRequests || 0}
+                                  </p>
+                                  <p className={`text-xs ${
+                                    theme === "dark" ? "text-gray-400" : "text-gray-600"
+                                  }`}>
+                                    Login to Jellyseerr to view usage
+                                  </p>
+                                </>
+                              )}
                             </div>
                             
                             <div className={`p-5 rounded-2xl border backdrop-blur-sm ${
@@ -695,16 +757,45 @@ const MediaDashboard = () => {
                                     : "bg-teal-200 text-teal-700"
                                 }`}>TV Shows</span>
                               </div>
-                              <p className={`text-3xl font-bold mb-1 ${
-                                theme === "dark" ? "text-white" : "text-gray-900"
-                              }`}>
-                                {(subscriptionPlans.find(p => p.id === currentPlan)?.features.tvRequests || 0) - (activeSubscription.tvRequestsUsed || 0)}
-                              </p>
-                              <p className={`text-xs ${
-                                theme === "dark" ? "text-gray-400" : "text-gray-600"
-                              }`}>
-                                of {subscriptionPlans.find(p => p.id === currentPlan)?.features.tvRequests || 0} available
-                              </p>
+                              {quotaLoading ? (
+                                <div className="animate-pulse">
+                                  <div className="h-8 bg-gray-700/50 rounded mb-2 w-16"></div>
+                                  <div className="h-3 bg-gray-700/50 rounded w-24"></div>
+                                </div>
+                              ) : quotaData ? (
+                                <>
+                                  <p className={`text-3xl font-bold mb-1 ${
+                                    theme === "dark" ? "text-white" : "text-gray-900"
+                                  }`}>
+                                    {quotaData.tvRemaining}
+                                  </p>
+                                  <p className={`text-xs ${
+                                    theme === "dark" ? "text-gray-400" : "text-gray-600"
+                                  }`}>
+                                    of {quotaData.tvLimit} available
+                                  </p>
+                                  {quotaData.tvDaysToReset > 0 && (
+                                    <p className={`text-xs mt-1 ${
+                                      theme === "dark" ? "text-gray-500" : "text-gray-500"
+                                    }`}>
+                                      Resets in {quotaData.tvDaysToReset} days
+                                    </p>
+                                  )}
+                                </>
+                              ) : (
+                                <>
+                                  <p className={`text-3xl font-bold mb-1 ${
+                                    theme === "dark" ? "text-white" : "text-gray-900"
+                                  }`}>
+                                    {subscriptionPlans.find(p => p.id === currentPlan)?.features.tvRequests || 0}
+                                  </p>
+                                  <p className={`text-xs ${
+                                    theme === "dark" ? "text-gray-400" : "text-gray-600"
+                                  }`}>
+                                    Login to Jellyseerr to view usage
+                                  </p>
+                                </>
+                              )}
                             </div>
                           </div>
 

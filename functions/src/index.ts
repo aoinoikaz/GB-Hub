@@ -562,10 +562,9 @@ const isValidMagicBytes = (buffer: Buffer, mimeType: string): boolean => {
 // Helper function to get plan request limits
 function getPlanRequestLimits(planId: string): { movie: number; tv: number } {
   const limits: { [key: string]: { movie: number; tv: number } } = {
-    standard: { movie: 1, tv: 1 },
-    duo: { movie: 2, tv: 1 },
-    family: { movie: 4, tv: 2 },
-    ultimate: { movie: 10, tv: 5 },
+    basic: { movie: 1, tv: 1 },
+    duo: { movie: 2, tv: 2 },
+    family: { movie: 5, tv: 5 },
   };
   
   return limits[planId] || { movie: 0, tv: 0 };
@@ -608,14 +607,14 @@ async function updateEmbySubscriptionPermissions(embyUserId: string, planId: str
     EnableRemoteControlOfOtherUsers: false,
     EnableSharedDeviceControl: false,
     EnableSyncTranscoding: false,
-    EnableSubtitleDownloading: true,  // Allow subtitle downloading
-    EnableSubtitleManagement: false,   // But not deletion
+    EnableSubtitleDownloading: false,
+    EnableSubtitleManagement: false,
     AllowCameraUpload: false,
     EnableMediaConversion: false,
     EnablePublicSharing: false,
     EnableSocialSharing: false,
     EnableUserPreferenceAccess: false,
-    IsDisabled: false,  // Make sure account is active
+    IsDisabled: false,
     IsHidden: true,
     IsHiddenRemotely: false,
     IsHiddenFromUnusedDevices: true,
@@ -625,20 +624,16 @@ async function updateEmbySubscriptionPermissions(embyUserId: string, planId: str
 
   // Plan-specific permissions (only what changes from base)
   const planPermissions: { [key: string]: any } = {
-    standard: { 
+    basic: { 
       SimultaneousStreamLimit: 1, 
-      EnableContentDownloading: true 
+      EnableContentDownloading: false
     },
     duo: { 
       SimultaneousStreamLimit: 2, 
       EnableContentDownloading: true 
     },
     family: { 
-      SimultaneousStreamLimit: 4, 
-      EnableContentDownloading: true 
-    },
-    ultimate: { 
-      SimultaneousStreamLimit: 10,  // Changed from 0 to 10 as per your comment
+      SimultaneousStreamLimit: 5, 
       EnableContentDownloading: true 
     },
   };

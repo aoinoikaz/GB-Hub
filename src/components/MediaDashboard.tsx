@@ -165,6 +165,18 @@ const MediaDashboard = () => {
   const [togglingAutoRenew, setTogglingAutoRenew] = useState(false);
   const functions = getFunctions();
 
+  const [quotaData, setQuotaData] = useState<{
+    movieLimit: number;
+    movieUsed: number;
+    movieRemaining: number;
+    movieDaysToReset: number;
+    tvLimit: number;
+    tvUsed: number;
+    tvRemaining: number;
+    tvDaysToReset: number;
+  } | null>(null);
+  const [quotaLoading, setQuotaLoading] = useState(false);
+
   // Check subscription status
   const checkSubscriptionStatus = async () => {
     if (!user) return;
@@ -369,6 +381,25 @@ const MediaDashboard = () => {
       console.error("Booster purchase error:", err);
     } finally {
       setPurchasingBooster(null);
+    }
+  };
+
+  // Add this after handlePurchaseBooster function
+  const fetchQuotaData = async () => {
+    if (!user || !activeSubscription) return;
+    
+    setQuotaLoading(true);
+    try {
+      const getJellyseerrQuotas = httpsCallable(functions, "getJellyseerrQuotas");
+      const result = await getJellyseerrQuotas({ userId: user.uid });
+      
+      if (result.data && (result.data as any).success && (result.data as any).quotas) {
+        setQuotaData((result.data as any).quotas);
+      }
+    } catch (error) {
+      console.error("Failed to fetch quota data:", error);
+    } finally {
+      setQuotaLoading(false);
     }
   };
 

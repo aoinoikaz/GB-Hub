@@ -173,6 +173,25 @@ interface CheckSubscriptionStatusResponse {
   };
 }
 
+interface GetJellyseerrQuotasData {
+  userId: string;
+}
+
+interface GetJellyseerrQuotasResponse {
+  success: boolean;
+  quotas?: {
+    movieLimit: number;
+    movieUsed: number;
+    movieRemaining: number;
+    movieDaysToReset: number;
+    tvLimit: number;
+    tvUsed: number;
+    tvRemaining: number;
+    tvDaysToReset: number;
+  };
+  error?: string;
+}
+
 // Service Handler Interface
 interface ServiceHandler {
   createUser(email: string, username: string, normalizedUsername: string, password: string): Promise<string>;
@@ -1974,3 +1993,158 @@ exports.uploadProfileImage = onCall<UploadProfileImageData>(async (request) => {
     throw new HttpsError("internal", `Failed to upload profile image: ${errorMessage}`);
   }
 });
+
+exports.getJellyseerrQuotas = onCall<GetJellyseerrQuotasData, Promise<GetJellyseerrQuotasResponse>>(
+  async (request) => {
+    const { userId } = request.data;
+    const auth = request.auth;
+
+    if (!auth || auth.uid !== userId) {
+      throw new HttpsError("unauthenticated", "User must be authenticated.");
+    }
+
+    try {
+      // Get user's Emby ID from Firestore
+      const userDoc = await admin.firestore().doc(`users/${userId}`).get();
+      if (!userDoc.exists) {
+        throw new HttpsError("not-found", "User not found.");
+      }
+
+      const userData = userDoc.data();
+      const embyUserId = userData?.services?.emby?.serviceUserId;
+
+      if (!embyUserId) {
+        return {
+          success: false,
+          error: "No Emby account linked",
+        };
+      }
+
+      // Get secrets
+      const secrets = await getSecretsConfig();
+      const JELLYSEERR_API_KEY = secrets.JELLYSEERR_API_KEY;
+
+      // Get all users from Jellyseerr to find our user
+      const usersResponse = await fetch(`${JELLYSEERR_URL}/api/v1/user?take=1000`, {
+        method: 'GET',
+        headers: {
+          "X-Api-Key": JELLYSEERR_API_KEY,
+          "Accept": "application/json",
+        },
+      });
+
+      if (!usersResponse.ok) {
+        console.error(`Failed to fetch Jellyseerr users: ${usersResponse.status}`);
+        return {
+          success: false,
+          error: "Failed to fetch Jellyseerr data",
+        };
+      }
+
+      const responseData = await usersResponse.json();
+      const users = responseData.results || responseData;
+      
+      const jellyseerrUser = users.find((user: any) => 
+        user.jellyfinUserId === embyUserId
+      );
+
+      if (!jellyseerrUser) {
+        return {
+          success: false,
+          error: "User not found in Jellyseerr. Please log in to Jellyseerr first.",
+        };
+      }
+
+      // Get user's detailed info
+      const userInfoResponse = await fetch(`${JELLYSEERR_URL}/api/v1/user/${jellyseerrUser.id}`, {
+        method: 'GET',
+        headers: {
+          "X-Api-Key": JELLYSEERR_API_KEY,
+          "Accept": "application/json",
+        },
+      });
+
+      if (!userInfoResponse.ok) {
+        return {
+          success: false,
+          error: "Failed to get user quota details",
+        };
+      }
+
+      const userInfo = await userInfoResponse.json();
+      
+      // Get quota info from user data
+      const movieQuotaLimit = userInfo.movieQuotaLimit || 0;
+      const movieQuotaDays = userInfo.movieQuotaDays || 0;
+      const tvQuotaLimit = userInfo.tvQuotaLimit || 0;
+      const tvQuotaDays = userInfo.tvQuotaDays || 0;
+
+      // Get request counts
+      const requestsResponse = await fetch(`${JELLYSEERR_URL}/api/v1/user/${jellyseerrUser.id}/requests?take=100`, {
+        method: 'GET',
+        headers: {
+          "X-Api-Key": JELLYSEERR_API_KEY,
+          "Accept": "application/json",
+        },
+      });
+
+      if (!requestsResponse.ok) {
+        // Return limits but no usage if we can't get requests
+        return {
+          success: true,
+          quotas: {
+            movieLimit: movieQuotaLimit,
+            movieUsed: 0,
+            movieRemaining: movieQuotaLimit,
+            movieDaysToReset: movieQuotaDays,
+            tvLimit: tvQuotaLimit,
+            tvUsed: 0,
+            tvRemaining: tvQuotaLimit,
+            tvDaysToReset: tvQuotaDays,
+          },
+        };
+      }
+
+      const requestsData = await requestsResponse.json();
+      const requests = requestsData.results || [];
+      
+      // Count requests within quota period
+      const now = new Date();
+      const movieCutoff = new Date(now.getTime() - (movieQuotaDays * 24 * 60 * 60 * 1000));
+      const tvCutoff = new Date(now.getTime() - (tvQuotaDays * 24 * 60 * 60 * 1000));
+      
+      let movieUsed = 0;
+      let tvUsed = 0;
+      
+      requests.forEach((req: any) => {
+        const requestDate = new Date(req.createdAt);
+        if (req.type === 'movie' && requestDate > movieCutoff) {
+          movieUsed++;
+        } else if (req.type === 'tv' && requestDate > tvCutoff) {
+          tvUsed++;
+        }
+      });
+
+      return {
+        success: true,
+        quotas: {
+          movieLimit: movieQuotaLimit,
+          movieUsed,
+          movieRemaining: Math.max(0, movieQuotaLimit - movieUsed),
+          movieDaysToReset: movieQuotaDays,
+          tvLimit: tvQuotaLimit,
+          tvUsed,
+          tvRemaining: Math.max(0, tvQuotaLimit - tvUsed),
+          tvDaysToReset: tvQuotaDays,
+        },
+      };
+
+    } catch (error: any) {
+      console.error("Error getting Jellyseerr quotas:", error);
+      return {
+        success: false,
+        error: error.message || "Failed to get quotas",
+      };
+    }
+  }
+);

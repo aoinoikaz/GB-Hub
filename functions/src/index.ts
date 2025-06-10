@@ -1,5 +1,5 @@
 import { onCall, HttpsError } from "firebase-functions/v2/https";
-//import { onSchedule } from "firebase-functions/v2/scheduler";
+import { onSchedule } from "firebase-functions/v2/scheduler";
 import * as admin from "firebase-admin";
 import * as fs from "fs";
 import * as path from "path";
@@ -2149,3 +2149,159 @@ exports.getJellyseerrQuotas = onCall<GetJellyseerrQuotasData, Promise<GetJellyse
     }
   }
 );
+
+// Scheduled function to process auto-renewals daily at midnight
+exports.processAutoRenewals = onSchedule("every day 00:00", async (event) => {
+  console.log("Starting auto-renewal processing...");
+  
+  try {
+    const now = new Date();
+    const tomorrow = new Date(now);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    
+    // Find subscriptions expiring tomorrow with autoRenew = true
+    const expiringSubsQuery = admin
+      .firestore()
+      .collection("subscriptions")
+      .where("status", "==", "active")
+      .where("autoRenew", "==", true)
+      .where("endDate", ">=", admin.firestore.Timestamp.fromDate(now))
+      .where("endDate", "<", admin.firestore.Timestamp.fromDate(tomorrow));
+    
+    const expiringSnapshot = await expiringSubsQuery.get();
+    
+    console.log(`Found ${expiringSnapshot.size} subscriptions to auto-renew`);
+    
+    for (const doc of expiringSnapshot.docs) {
+      const subData = doc.data();
+      
+      try {
+        // Check user's token balance
+        const userDoc = await admin.firestore().doc(`users/${subData.userId}`).get();
+        if (!userDoc.exists) continue;
+        
+        const userData = userDoc.data();
+        const tokenBalance = userData?.tokenBalance || 0;
+        const plan = SUBSCRIPTION_PLANS[subData.planId];
+        const renewalCost = plan.monthly;
+        
+        if (tokenBalance >= renewalCost) {
+          // Process renewal
+          await admin.firestore().runTransaction(async (transaction) => {
+            // Deduct tokens
+            transaction.update(userDoc.ref, {
+              tokenBalance: admin.firestore.FieldValue.increment(-renewalCost),
+            });
+            
+            // Create new subscription
+            const newEndDate = new Date(subData.endDate.toDate());
+            newEndDate.setMonth(newEndDate.getMonth() + 1);
+            
+            const newSubRef = admin.firestore().collection("subscriptions").doc();
+            transaction.set(newSubRef, {
+              subscriptionId: newSubRef.id,
+              userId: subData.userId,
+              planId: subData.planId,
+              billingPeriod: "monthly",
+              duration: 1,
+              tokenCost: renewalCost,
+              startDate: subData.endDate,
+              endDate: admin.firestore.Timestamp.fromDate(newEndDate),
+              status: "active",
+              autoRenew: true,
+              renewedFrom: doc.id,
+              createdAt: admin.firestore.FieldValue.serverTimestamp(),
+            });
+            
+            // Mark old subscription as renewed
+            transaction.update(doc.ref, {
+              status: "renewed",
+              renewedAt: admin.firestore.FieldValue.serverTimestamp(),
+              renewedTo: newSubRef.id,
+            });
+            
+            // Log redemption
+            const redemptionRef = admin.firestore().collection("redemptions").doc();
+            transaction.set(redemptionRef, {
+              userId: subData.userId,
+              productType: "subscriptionRenewal",
+              productId: subData.planId,
+              tokenCost: renewalCost,
+              subscriptionId: newSubRef.id,
+              autoRenewal: true,
+              createdAt: admin.firestore.FieldValue.serverTimestamp(),
+            });
+          });
+          
+          console.log(`Auto-renewed subscription for user ${subData.userId}`);
+        } else {
+          // Insufficient tokens - disable auto-renew
+          await doc.ref.update({
+            autoRenew: false,
+            autoRenewFailedAt: admin.firestore.FieldValue.serverTimestamp(),
+            autoRenewFailReason: "insufficient_tokens",
+          });
+          
+          console.log(`Failed to auto-renew for user ${subData.userId}: insufficient tokens (has ${tokenBalance}, needs ${renewalCost})`);
+        }
+      } catch (error) {
+        console.error(`Error processing renewal for subscription ${doc.id}:`, error);
+      }
+    }
+    
+    // Check for expired subscriptions to disable services
+    const expiredSubsQuery = admin
+      .firestore()
+      .collection("subscriptions")
+      .where("status", "==", "active")
+      .where("endDate", "<", admin.firestore.Timestamp.fromDate(now));
+    
+    const expiredSnapshot = await expiredSubsQuery.get();
+    
+    console.log(`Found ${expiredSnapshot.size} expired subscriptions to disable`);
+    
+    for (const doc of expiredSnapshot.docs) {
+      const subData = doc.data();
+      
+      try {
+        await doc.ref.update({
+          status: "expired",
+          expiredAt: admin.firestore.FieldValue.serverTimestamp(),
+        });
+        
+        // Get user data
+        const userDoc = await admin.firestore().doc(`users/${subData.userId}`).get();
+        if (userDoc.exists) {
+          const userData = userDoc.data();
+          const embyUserId = userData?.services?.emby?.serviceUserId;
+          
+          if (embyUserId) {
+            try {
+              // Disable Emby access
+              await disableEmbyAccount(embyUserId);
+              
+              // Set Jellyseerr limits to 0
+              await updateJellyseerrRequestLimits(
+                userData.email || "", 
+                "basic", 
+                embyUserId, 
+                { movieLimit: 0, tvLimit: 0 }
+              );
+              
+              console.log(`Disabled services for expired subscription: user ${subData.userId}`);
+            } catch (error) {
+              console.error(`Failed to disable services for user ${subData.userId}:`, error);
+            }
+          }
+        }
+      } catch (error) {
+        console.error(`Error processing expired subscription ${doc.id}:`, error);
+      }
+    }
+    
+    console.log("Auto-renewal processing completed");
+  } catch (error) {
+    console.error("Error in processAutoRenewals:", error);
+    throw error;
+  }
+});

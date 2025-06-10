@@ -59,7 +59,7 @@ const subscriptionPlans: SubscriptionPlan[] = [
     monthlyTokens: 70,
     features: {
       streams: 1,
-      downloads: false,
+      downloads: true,
       movieRequests: 1,
       tvRequests: 1,
       support: "standard",

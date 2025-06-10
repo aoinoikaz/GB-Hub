@@ -848,7 +848,7 @@ exports.createPaypalOrder = onCall<CreatePaypalOrderData, Promise<CreatePaypalOr
       throw new HttpsError("invalid-argument", "Currency must be 'USD'.");
     }
 
-    const validTokenPackages = [50, 100, 300, 600, 1200, 2500];
+    const validTokenPackages = [70, 120, 200, 300, 1200, 2500];
     if (!validTokenPackages.includes(tokens)) {
       throw new HttpsError("invalid-argument", "Invalid token package.");
     }
@@ -952,7 +952,7 @@ exports.processTokenPurchase = onCall<ProcessTokenPurchaseData, Promise<ProcessT
       throw new HttpsError("invalid-argument", "Currency must be 'USD'.");
     }
 
-    const validTokenPackages = [50, 100, 300, 600, 1200, 2500];
+    const validTokenPackages = [70, 120, 200, 300, 1200, 2500];
     if (!validTokenPackages.includes(tokens)) {
       throw new HttpsError("invalid-argument", "Invalid token package.");
     }

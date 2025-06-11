@@ -1025,6 +1025,14 @@ const MediaDashboard = () => {
                           
                           {/* Features */}
                           <ul className="space-y-3 text-sm mb-6">
+                            
+                            <li className={`flex items-center gap-2 ${
+                              theme === "dark" ? "text-gray-300" : "text-gray-700"
+                            }`}>
+                              <Sparkle size={16} className={theme === "dark" ? "text-gray-400" : "text-gray-500"} />
+                              <span>1080p & 4K library access</span>
+                            </li>
+
                             <li className={`flex items-center gap-2 ${
                               theme === "dark" ? "text-gray-300" : "text-gray-700"
                             }`}>

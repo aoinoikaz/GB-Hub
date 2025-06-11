@@ -3,7 +3,7 @@ import { useTheme } from "../context/theme-context";
 import { useAuth } from "../context/auth-context";
 import { collection, query, getDocs, where } from "firebase/firestore";
 import { db } from "../config/firebase";
-import { Spinner, Flame, Trophy, Crown, Handshake, Coin, Star } from "phosphor-react";
+import { Spinner, Trophy, Crown, Handshake, Coin, Star, Heart, Warning, Sparkle } from "phosphor-react";
 import Pagination from "./Pagination"; // NEW IMPORT
 
 interface LeaderboardEntry {
@@ -145,70 +145,134 @@ const Leaderboard = () => {
   const getRankIcon = (index: number, type: string) => {
     const globalIndex = index + (currentPage - 1) * entriesPerPage;
     if (globalIndex === 0) {
-      return <Trophy size={24} className="text-yellow-400" />; // Gold trophy for #1
+      return <Trophy size={24} className="text-white" weight="fill" />; // Gold trophy for #1
     } else if (globalIndex === 1) {
-      return <Crown size={24} className="text-gray-300" />; // Silver crown for #2
+      return <Crown size={24} className="text-white" weight="fill" />; // Silver crown for #2
     } else if (globalIndex === 2) {
-      return <Star size={24} className="text-orange-500" />; // Bronze star for #3
+      return <Star size={24} className="text-white" weight="fill" />; // Bronze star for #3
     }
-    // Type-specific icons for other ranks with a new color
+    // Type-specific icons for other ranks
     if (type === "tippers") {
-      return <Flame size={24} className="text-teal-500" />;
+      return <Heart size={24} className="text-red-400" weight="fill" />;
     } else if (type === "trades") {
-      return <Handshake size={24} className="text-teal-500" />;
+      return <Handshake size={24} className="text-blue-400" weight="fill" />;
     } else {
-      return <Coin size={24} className="text-teal-500" />;
+      return <Coin size={24} className="text-yellow-400" weight="fill" />;
     }
-  };
-
-  const getBadgeColor = (index: number) => {
-    const globalIndex = index + (currentPage - 1) * entriesPerPage;
-    if (globalIndex === 0) {
-      return "border-yellow-400"; // Gold badge for #1
-    } else if (globalIndex === 1) {
-      return "border-gray-300"; // Silver badge for #2
-    } else if (globalIndex === 2) {
-      return "border-orange-500"; // Bronze badge for #3
-    }
-    return ""; // No badge for ranks 4+
   };
 
   return (
-    <div
-      className={`min-h-screen p-6 ${theme === "dark" ? "bg-[#121212] text-gray-100" : "bg-gray-100 text-gray-900"}`}
-    >
-      <div className="max-w-5xl mx-auto">
-        <h1 className="text-4xl font-extrabold mb-8 text-center bg-gradient-to-r from-purple-500 to-pink-500 bg-clip-text text-transparent">
-          Gondola Bros Leaderboard
-        </h1>
-        <div className="mb-8 p-6 bg-[#1c1c1c] rounded-xl shadow-xl flex justify-center items-center">
-          <div className="flex flex-col sm:flex-row justify-center items-center space-y-4 sm:space-y-0 sm:space-x-6">
-            <label className="text-gray-200 text-lg font-semibold">Filter by:</label>
-            <select
-              value={type}
-              onChange={(e) => setType(e.target.value as "tippers" | "trades" | "tokens")}
-              className="px-4 py-2 border rounded-lg bg-gray-800 border-gray-600 text-white focus:ring-2 focus:ring-purple-500 focus:outline-none transition-all duration-200"
-            >
-              <option value="tippers">Top Tippers</option>
-              <option value="trades">Top Traders</option>
-              <option value="tokens">Token Whales</option>
-            </select>
+    <div className={`min-h-screen ${theme === "dark" ? "bg-gray-950" : "bg-gray-50"}`}>
+      {/* Animated Background */}
+      <div className="fixed inset-0 overflow-hidden pointer-events-none">
+        <div className="absolute -top-40 -right-40 w-80 h-80 bg-purple-500 rounded-full mix-blend-multiply filter blur-3xl opacity-10 animate-blob"></div>
+        <div className="absolute -bottom-40 -left-40 w-80 h-80 bg-pink-500 rounded-full mix-blend-multiply filter blur-3xl opacity-10 animate-blob animation-delay-2000"></div>
+        <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-80 h-80 bg-blue-500 rounded-full mix-blend-multiply filter blur-3xl opacity-10 animate-blob animation-delay-4000"></div>
+      </div>
+
+      <div className="relative p-6 md:p-8 max-w-6xl mx-auto">
+        {/* Header */}
+        <div className="text-center mb-12">
+          <div className="flex items-center justify-center gap-3 mb-4">
+            <div className="p-3 rounded-2xl bg-gradient-to-br from-yellow-500 to-orange-500 shadow-lg">
+              <Trophy size={36} className="text-white" />
+            </div>
+            <h1 className={`text-4xl md:text-5xl font-bold ${theme === "dark" ? "text-white" : "text-gray-900"}`}>
+              Leaderboard
+            </h1>
+          </div>
+          <p className={`text-lg ${theme === "dark" ? "text-gray-400" : "text-gray-600"}`}>
+            See who's leading the Gondola Bros community
+          </p>
+        </div>
+
+        {/* Filter Section */}
+        <div className={`mb-10 p-8 rounded-3xl backdrop-blur-xl ${
+          theme === "dark" 
+            ? "bg-white/5 border border-white/10" 
+            : "bg-white/70 border border-gray-200"
+        }`}>
+          <div className="flex flex-col sm:flex-row items-center justify-center gap-6">
+            <div className="flex items-center gap-3">
+              <Sparkle size={20} className="text-yellow-400" />
+              <p className={`font-medium ${theme === "dark" ? "text-gray-300" : "text-gray-700"}`}>
+                View Rankings For:
+              </p>
+            </div>
+            <div className="flex flex-wrap justify-center gap-3">
+              {[
+                { value: "tippers", label: "Top Supporters", icon: Heart, gradient: "from-red-500 to-pink-500" },
+                { value: "trades", label: "Trading Leaders", icon: Handshake, gradient: "from-blue-500 to-purple-500" },
+                { value: "tokens", label: "Token Whales", icon: Coin, gradient: "from-yellow-500 to-orange-500" }
+              ].map((option) => (
+                <button
+                  key={option.value}
+                  onClick={() => setType(option.value as any)}
+                  className={`px-6 py-3 rounded-2xl font-medium transition-all flex items-center gap-2 ${
+                    type === option.value
+                      ? `bg-gradient-to-r ${option.gradient} text-white shadow-lg transform scale-105`
+                      : theme === "dark"
+                        ? "bg-gray-800/50 text-gray-300 hover:bg-gray-700/50"
+                        : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                  }`}
+                >
+                  <option.icon size={18} weight={type === option.value ? "fill" : "regular"} />
+                  {option.label}
+                </button>
+              ))}
+            </div>
           </div>
         </div>
 
-        {error && <p className="text-red-500 text-sm mb-6 text-center">{error}</p>}
+        {error && (
+          <div className="mb-8 p-4 bg-red-500/10 border border-red-500/30 rounded-2xl backdrop-blur-md">
+            <p className="text-red-400 text-center flex items-center justify-center gap-2">
+              <Warning size={20} weight="fill" />
+              {error}
+            </p>
+          </div>
+        )}
 
-        <div className="mb-8 p-6 bg-[#1c1c1c] rounded-xl shadow-xl">
-          <div className="flex justify-between items-center mb-6">
-            <h2 className="text-2xl font-bold text-white">
-              {type === "tippers" ? "Top Tippers" : type === "trades" ? "Top Traders" : "Token Whales"}
-            </h2>
-            <div className="flex items-center space-x-3">
-              <label className="text-gray-200 font-medium">Show:</label>
+        {/* Main Leaderboard */}
+        <div className={`p-8 rounded-3xl backdrop-blur-xl ${
+          theme === "dark" 
+            ? "bg-white/5 border border-white/10" 
+            : "bg-white/70 border border-gray-200"
+        }`}>
+          <div className="flex items-center justify-between mb-8">
+            <div className="flex items-center gap-3">
+              <div className={`p-3 rounded-2xl bg-gradient-to-br ${
+                type === "tippers" ? "from-red-500 to-pink-500" :
+                type === "trades" ? "from-blue-500 to-purple-500" :
+                "from-yellow-500 to-orange-500"
+              } shadow-lg`}>
+                {type === "tippers" ? <Heart size={24} className="text-white" /> :
+                 type === "trades" ? <Handshake size={24} className="text-white" /> :
+                 <Coin size={24} className="text-white" />}
+              </div>
+              <div>
+                <h2 className={`text-2xl font-bold ${theme === "dark" ? "text-white" : "text-gray-900"}`}>
+                  {type === "tippers" ? "Top Supporters" : type === "trades" ? "Trading Leaders" : "Token Whales"}
+                </h2>
+                <p className={`text-sm ${theme === "dark" ? "text-gray-400" : "text-gray-600"}`}>
+                  {type === "tippers" ? "Most generous community members" :
+                   type === "trades" ? "Most active token traders" :
+                   "Highest token holders"}
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center gap-3">
+              <label className={`text-sm ${theme === "dark" ? "text-gray-400" : "text-gray-600"}`}>
+                Show:
+              </label>
               <select
                 value={entriesPerPage}
                 onChange={handleEntriesPerPageChange}
-                className="px-3 py-1 border rounded-lg bg-gray-800 border-gray-600 text-white focus:ring-2 focus:ring-purple-500 focus:outline-none"
+                className={`px-3 py-1.5 rounded-lg text-sm ${
+                  theme === "dark" 
+                    ? "bg-gray-800/50 text-white border border-gray-700 focus:border-purple-500" 
+                    : "bg-white text-gray-900 border border-gray-300 focus:border-purple-500"
+                } focus:outline-none focus:ring-2 focus:ring-purple-500/20`}
               >
                 <option value={5}>5</option>
                 <option value={10}>10</option>
@@ -218,51 +282,132 @@ const Leaderboard = () => {
               </select>
             </div>
           </div>
-          
-          <div className="space-y-2">
+
+          <div className="space-y-4">
             {loading ? (
-              <div className="text-gray-200 text-center py-6">
-                <Spinner size={32} className="animate-spin mx-auto mb-2" />
-                <p>Loading leaderboard...</p>
+              <div className="text-center py-12">
+                <Spinner size={48} className="animate-spin mx-auto mb-4 text-purple-400" />
+                <p className={theme === "dark" ? "text-gray-400" : "text-gray-600"}>
+                  Loading rankings...
+                </p>
               </div>
             ) : leaderboard.length > 0 ? (
               leaderboard.map((entry, index) => {
                 const globalRank = index + (currentPage - 1) * entriesPerPage;
-                console.log(`Entry #${globalRank + 1}: globalRank=${globalRank}, shouldHaveBorder=${globalRank < 3}`);
                 return (
                   <div
                     key={entry.userId}
-                    className={`p-3 bg-gray-800 rounded-lg shadow-md flex items-center space-x-4 hover:scale-105 hover:shadow-lg transition-transform duration-200 ${
-                      globalRank < 3 ? `border-l-4 ${getBadgeColor(index)}` : ""
-                    }`}
+                    className={`group relative overflow-hidden rounded-2xl backdrop-blur-xl border transition-all duration-300 hover:scale-[1.02] ${
+                      theme === "dark" 
+                        ? "bg-gradient-to-r from-gray-800/50 to-gray-900/50 border-white/10 hover:border-white/20" 
+                        : "bg-gradient-to-r from-gray-50 to-gray-100 border-gray-200 hover:border-gray-300"
+                    } ${globalRank < 3 ? `ring-2 ${
+                      globalRank === 0 ? "ring-yellow-400/50" :
+                      globalRank === 1 ? "ring-gray-300/50" :
+                      "ring-orange-500/50"
+                    }` : ""}`}
                   >
-                    <div className="flex-shrink-0">{getRankIcon(index, type)}</div>
-                    <div className="flex-1">
-                      <p className="text-gray-100 font-medium">
-                        #{globalRank + 1}: {entry.username}
-                      </p>
-                      <p className="text-gray-400 text-sm">
-                        {type === "tippers"
-                          ? `$${entry.value.toFixed(2)}`
-                          : `${entry.value} ${type === "trades" ? "tokens traded" : "tokens"}`}
-                      </p>
+                    {/* Gradient overlay for top 3 */}
+                    {globalRank < 3 && (
+                      <div className={`absolute inset-0 bg-gradient-to-r ${
+                        globalRank === 0 ? "from-yellow-500/10 to-orange-500/10" :
+                        globalRank === 1 ? "from-gray-300/10 to-gray-400/10" :
+                        "from-orange-500/10 to-red-500/10"
+                      }`}></div>
+                    )}
+                    
+                    <div className="relative p-6 flex items-center justify-between">
+                      <div className="flex items-center gap-4">
+                        {/* Rank Badge */}
+                        <div className={`relative flex items-center justify-center w-14 h-14 rounded-2xl ${
+                          globalRank === 0 ? "bg-gradient-to-br from-yellow-400 to-orange-500 shadow-lg shadow-yellow-500/30" :
+                          globalRank === 1 ? "bg-gradient-to-br from-gray-300 to-gray-400 shadow-lg shadow-gray-400/30" :
+                          globalRank === 2 ? "bg-gradient-to-br from-orange-400 to-red-500 shadow-lg shadow-orange-500/30" :
+                          theme === "dark" ? "bg-gray-800" : "bg-gray-200"
+                        }`}>
+                          {globalRank < 3 ? (
+                            getRankIcon(index, type)
+                          ) : (
+                            <span className={`text-lg font-bold ${
+                              theme === "dark" ? "text-gray-400" : "text-gray-600"
+                            }`}>#{globalRank + 1}</span>
+                          )}
+                        </div>
+                        
+                        {/* User Info */}
+                        <div>
+                          <p className={`text-lg font-semibold ${
+                            theme === "dark" ? "text-white" : "text-gray-900"
+                          }`}>
+                            {entry.username}
+                          </p>
+                          <div className="flex items-center gap-2 mt-1">
+                            <div className={`h-1.5 w-1.5 rounded-full ${
+                              type === "tippers" ? "bg-red-400" :
+                              type === "trades" ? "bg-blue-400" :
+                              "bg-yellow-400"
+                            }`}></div>
+                            <p className={`text-sm ${
+                              theme === "dark" ? "text-gray-400" : "text-gray-600"
+                            }`}>
+                              {globalRank === 0 ? "Champion" :
+                               globalRank === 1 ? "Runner-up" :
+                               globalRank === 2 ? "3rd Place" :
+                               `Rank #${globalRank + 1}`}
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                      
+                      {/* Value Display */}
+                      <div className="text-right">
+                        <p className={`text-2xl font-bold ${
+                          type === "tippers" ? "text-red-400" :
+                          type === "trades" ? "text-blue-400" :
+                          "text-yellow-400"
+                        }`}>
+                          {type === "tippers" ? `$${entry.value.toFixed(2)}` : entry.value.toLocaleString()}
+                        </p>
+                        <p className={`text-sm ${
+                          theme === "dark" ? "text-gray-500" : "text-gray-500"
+                        }`}>
+                          {type === "tippers" ? "donated" :
+                           type === "trades" ? "tokens traded" :
+                           "tokens"}
+                        </p>
+                      </div>
                     </div>
                   </div>
                 );
               })
             ) : (
-              <p className="text-gray-200 text-center py-6">No entries yet.</p>
+              <div className="text-center py-12">
+                <div className={`w-20 h-20 mx-auto mb-4 rounded-full flex items-center justify-center ${
+                  theme === "dark" ? "bg-gray-800" : "bg-gray-200"
+                }`}>
+                  <Trophy size={40} className={theme === "dark" ? "text-gray-600" : "text-gray-400"} />
+                </div>
+                <p className={`text-lg font-medium mb-2 ${
+                  theme === "dark" ? "text-gray-300" : "text-gray-700"
+                }`}>
+                  No entries yet
+                </p>
+                <p className={theme === "dark" ? "text-gray-500" : "text-gray-500"}>
+                  Be the first to make it on the leaderboard!
+                </p>
+              </div>
             )}
           </div>
-          
-          {/* NEW: Using the Pagination component */}
+
+          {/* Pagination */}
           {totalEntries > 0 && (
             <Pagination
               currentPage={currentPage}
               totalPages={totalPages}
               onPageChange={setCurrentPage}
               isLoading={loading}
-              className="mt-6"
+              className="mt-8"
+              showPageNumbers={true}
             />
           )}
         </div>

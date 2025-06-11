@@ -23,6 +23,7 @@ let secretsConfig: {
   PAYPAL_SECRET_SANDBOX: string;
   PAYPAL_API_BASE_SANDBOX: string;
   JELLYSEERR_API_KEY: string;
+  TURNSTILE_SECRET_KEY: string;
 } | null = null;
 
 async function getSecretsConfig() {
@@ -53,7 +54,16 @@ const VALID_MAGIC_BYTES: { [key: string]: number[] } = {
 };
 
 
-// Interface definitions
+interface VerifySignupData {
+  email: string;
+  turnstileToken: string;
+}
+
+interface VerifySignupResponse {
+  success: boolean;
+  message?: string;
+}
+
 interface UploadProfileImageData {
   fileName: string;
   contentType: string;
@@ -191,6 +201,39 @@ interface GetJellyseerrQuotasResponse {
   };
   error?: string;
 }
+
+// Add this helper function for Turnstile verification
+async function verifyTurnstileToken(token: string): Promise<boolean> {
+  try {
+    const secrets = await getSecretsConfig();
+    const verifyUrl = 'https://challenges.cloudflare.com/turnstile/v0/siteverify';
+    
+    const formData = new URLSearchParams();
+    formData.append('secret', secrets.TURNSTILE_SECRET_KEY);
+    formData.append('response', token);
+    
+    const verifyResponse = await fetch(verifyUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+      },
+      body: formData,
+    });
+
+    const verifyResult = await verifyResponse.json();
+    
+    console.log("Turnstile verification result:", {
+      success: verifyResult.success,
+      errorCodes: verifyResult['error-codes'],
+    });
+    
+    return verifyResult.success === true;
+  } catch (error) {
+    console.error("Turnstile verification error:", error);
+    return false;
+  }
+}
+
 
 // Service Handler Interface
 interface ServiceHandler {
@@ -1802,6 +1845,33 @@ exports.checkUsername = onCall<CheckUsernameData>(async (request) => {
     throw new HttpsError("internal", `Failed to check username availability: ${errorMessage}`);
   }
 });
+
+
+// Then add the Cloud Function
+exports.verifySignup = onCall<VerifySignupData, Promise<VerifySignupResponse>>(
+  async (request) => {
+    const { email, turnstileToken } = request.data;
+
+    // Don't require auth for signup verification
+    if (!email || !turnstileToken) {
+      throw new HttpsError("invalid-argument", "Email and Turnstile token are required.");
+    }
+
+    // Verify Turnstile token
+    const isValid = await verifyTurnstileToken(turnstileToken);
+    
+    if (!isValid) {
+      console.log(`Failed Turnstile verification for email: ${email}`);
+      throw new HttpsError("failed-precondition", "Security verification failed. Please try again.");
+    }
+
+    console.log(`Successful signup verification for email: ${email}`);
+    return { 
+      success: true,
+      message: "Verification successful" 
+    };
+  }
+);
 
 
 exports.setupUserAccount = onCall<SetupUserAccountData>(async (request) => {

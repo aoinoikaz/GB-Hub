@@ -36,7 +36,8 @@ $httpFunctions = @(
     "uploadProfileImage",
     "checkUsername",
     "toggleAutoRenew",
-    "getJellyseerrQuotas"
+    "getJellyseerrQuotas",
+    "verifySignup"
 )
 
 # List of scheduled functions

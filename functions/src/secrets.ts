@@ -57,6 +57,7 @@ export async function getAllSecrets(): Promise<{
   PAYPAL_SECRET_SANDBOX: string;
   PAYPAL_API_BASE_SANDBOX: string;
   JELLYSEERR_API_KEY: string;
+  TURNSTILE_SECRET_KEY: string;
 }> {
   const [
     embyApiKey,
@@ -66,7 +67,8 @@ export async function getAllSecrets(): Promise<{
     paypalClientIdSandbox,
     paypalSecretSandbox,
     paypalApiBaseSandbox,
-    jellyseerrApiKey
+    jellyseerrApiKey,
+    turnstileSecretKey
   ] = await Promise.all([
     getSecret('EMBY_API_KEY'),
     getSecret('PAYPAL_CLIENT_ID'),
@@ -76,6 +78,7 @@ export async function getAllSecrets(): Promise<{
     getSecret('PAYPAL_SECRET_SANDBOX'),
     getSecret('PAYPAL_API_BASE_SANDBOX'),
     getSecret('JELLYSEERR_API_KEY'),
+    getSecret('TURNSTILE_SECRET_KEY'),
   ]);
 
   return {
@@ -87,5 +90,6 @@ export async function getAllSecrets(): Promise<{
     PAYPAL_SECRET_SANDBOX: paypalSecretSandbox,
     PAYPAL_API_BASE_SANDBOX: paypalApiBaseSandbox,
     JELLYSEERR_API_KEY: jellyseerrApiKey,
+    TURNSTILE_SECRET_KEY: turnstileSecretKey,
   };
 }

@@ -4,6 +4,7 @@ import { auth } from "../../config/firebase";
 import { useAuth } from "../../context/auth-context";
 import { Spinner } from "phosphor-react";
 import PasswordPolicyInput from "../PasswordPolicyInput";
+import { Turnstile } from "@marsidev/react-turnstile";
 
 const SignUpPanel = ({ onSwap }: { onSwap: () => void }) => {
   const [email, setEmail] = useState("");
@@ -13,6 +14,7 @@ const SignUpPanel = ({ onSwap }: { onSwap: () => void }) => {
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
   const [loading, setLoading] = useState(false);
+  const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
   const { logout } = useAuth();
 
   const handleSignUp = async (e: React.FormEvent) => {
@@ -23,6 +25,12 @@ const SignUpPanel = ({ onSwap }: { onSwap: () => void }) => {
 
     if (!isPasswordValid) {
       setError("Please ensure the password meets the requirements");
+      setLoading(false);
+      return;
+    }
+
+    if (!turnstileToken) {
+      setError("Please complete the security check");
       setLoading(false);
       return;
     }
@@ -107,6 +115,28 @@ const SignUpPanel = ({ onSwap }: { onSwap: () => void }) => {
             showInput={false}
             showChecklist={true}
             confirmPassword={confirmPassword}
+          />
+        </div>
+
+        {/* Turnstile CAPTCHA */}
+        <div className="mb-6 flex justify-center">
+          <Turnstile
+            siteKey={import.meta.env.VITE_TURNSTILE_SITE_KEY}
+            onSuccess={(token) => {
+              setTurnstileToken(token);
+              setError(""); // Clear any previous errors
+            }}
+            onError={() => {
+              setError("Security verification failed. Please try again.");
+              setTurnstileToken(null);
+            }}
+            onExpire={() => {
+              setTurnstileToken(null);
+            }}
+            options={{
+              theme: 'dark',
+              size: 'normal',
+            }}
           />
         </div>
 

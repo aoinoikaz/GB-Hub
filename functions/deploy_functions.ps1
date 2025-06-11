@@ -58,7 +58,7 @@ $httpParams = @(
 )
 
 # Optional: Set PayPal sandbox mode (uncomment if needed)
-$httpParams += "--set-env-vars=PAYPAL_SANDBOX=true"
+#$httpParams += "--set-env-vars=PAYPAL_SANDBOX=true"
 
 $totalFunctions = $httpFunctions.Count + $scheduledFunctions.Count
 

@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { getFunctions, httpsCallable } from "firebase/functions";
 import { createUserWithEmailAndPassword, updateProfile, sendEmailVerification } from "firebase/auth";
 import { auth } from "../../config/firebase";
 import { useAuth } from "../../context/auth-context";
@@ -36,6 +37,16 @@ const SignUpPanel = ({ onSwap }: { onSwap: () => void }) => {
     }
 
     try {
+      // First verify with backend
+      const functions = getFunctions();
+      const verifySignup = httpsCallable(functions, "verifySignup");
+      
+      await verifySignup({
+        email,
+        turnstileToken,
+      });
+
+      // If verification passes, create the account
       const userCredential = await createUserWithEmailAndPassword(auth, email, password);
       const user = userCredential.user;
 

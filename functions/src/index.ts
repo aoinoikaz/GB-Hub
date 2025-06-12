@@ -9,12 +9,10 @@ import * as speakeasy from 'speakeasy';
 import * as QRCode from 'qrcode';
 //import * as bcrypt from 'bcryptjs';
 
-// Initialize Firebase Admin SDK
-if (!admin.apps.length) {
-  admin.initializeApp({
-    storageBucket: "gondola-bros-hub.firebasestorage.app",
-  });
-}
+const IS_PAYPAL_SANDBOX = process.env.PAYPAL_SANDBOX === 'true';
+const BUCKET = admin.storage().bucket();
+const EMBY_BASE_URL: string = "https://media.gondolabros.com";
+const JELLYSEERR_URL = "https://request-media.gondolabros.com"
 
 // Initialize secrets
 let secretsConfig: {
@@ -29,6 +27,13 @@ let secretsConfig: {
   TURNSTILE_SECRET_KEY: string;
 } | null = null;
 
+
+if (!admin.apps.length) {
+  admin.initializeApp({
+    storageBucket: "gondola-bros-hub.firebasestorage.app",
+  });
+}
+
 async function getSecretsConfig() {
   if (!secretsConfig) {
     secretsConfig = await getAllSecrets();
@@ -36,24 +41,17 @@ async function getSecretsConfig() {
   return secretsConfig;
 }
 
-// Determine if we're in sandbox mode (you can set this via environment variable)
-const IS_PAYPAL_SANDBOX = process.env.PAYPAL_SANDBOX === 'true';
-
-const EMBY_BASE_URL: string = "https://media.gondolabros.com";
-const JELLYSEERR_URL = "https://request-media.gondolabros.com"
-const BUCKET = admin.storage().bucket();
-
-const SUBSCRIPTION_PLANS: { [key: string]: SubscriptionPlan } = {
-  basic: { monthly: 70 },
-  duo: { monthly: 120 },
-  family: { monthly: 200 },
-};
-
 const VALID_MAGIC_BYTES: { [key: string]: number[] } = {
   "image/png": [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a],
   "image/jpeg": [0xff, 0xd8, 0xff],
   "image/jpg": [0xff, 0xd8, 0xff],
   "image/bmp": [0x42, 0x4d],
+};
+
+const SUBSCRIPTION_PLANS: { [key: string]: SubscriptionPlan } = {
+  basic: { monthly: 70 },
+  duo: { monthly: 120 },
+  family: { monthly: 200 },
 };
 
 
@@ -66,7 +64,6 @@ interface VerifySignupResponse {
   success: boolean;
   message?: string;
 }
-
 
 interface Initiate2FAResponse {
   secret: string;
@@ -212,7 +209,7 @@ interface GetJellyseerrQuotasResponse {
   error?: string;
 }
 
-// Add this helper function for Turnstile verification
+
 async function verifyTurnstileToken(token: string): Promise<boolean> {
   try {
     const secrets = await getSecretsConfig();
@@ -244,8 +241,6 @@ async function verifyTurnstileToken(token: string): Promise<boolean> {
   }
 }
 
-
-// Service Handler Interface
 interface ServiceHandler {
   createUser(email: string, username: string, normalizedUsername: string, password: string): Promise<string>;
   enableUser(userId: string): Promise<void>;
@@ -290,8 +285,8 @@ class EmbyService implements ServiceHandler {
       EnableSharedDeviceControl: false,
       EnableContentDownloading: false,
       EnableSyncTranscoding: false,
-      EnableSubtitleDownloading: true,  // Allow subtitle downloading
-      EnableSubtitleManagement: false,  // But not deletion
+      EnableSubtitleDownloading: true,
+      EnableSubtitleManagement: false,
       AllowCameraUpload: false,
       EnableMediaConversion: false,
       EnablePublicSharing: false,
@@ -836,9 +831,8 @@ async function updateJellyseerrRequestLimits(
 
     console.log(`Updating Jellyseerr with FULL payload`);
 
-    // CORRECT ENDPOINT: POST to /settings/main
     const updateResponse = await fetch(`${JELLYSEERR_URL}/api/v1/user/${jellyseerrUser.id}/settings/main`, {
-      method: "POST",  // NOT PUT!
+      method: "POST",
       headers: {
         "X-Api-Key": JELLYSEERR_API_KEY,
         "Content-Type": "application/json",
@@ -860,10 +854,9 @@ async function updateJellyseerrRequestLimits(
   }
 }
 
-
 async function syncJellyseerrUser(embyUserId: string): Promise<boolean> {
   const secrets = await getSecretsConfig();
-  
+
   try {
     const response = await fetch(`${JELLYSEERR_URL}/api/v1/user/import-from-jellyfin`, {
       method: 'POST',
@@ -927,10 +920,8 @@ exports.createPaypalOrder = onCall<CreatePaypalOrderData, Promise<CreatePaypalOr
     }
 
     try {
-      // Get secrets from Secret Manager
       const secrets = await getSecretsConfig();
       
-      // Use sandbox or production credentials based on environment
       const clientId = IS_PAYPAL_SANDBOX ? secrets.PAYPAL_CLIENT_ID_SANDBOX : secrets.PAYPAL_CLIENT_ID;
       const secret = IS_PAYPAL_SANDBOX ? secrets.PAYPAL_SECRET_SANDBOX : secrets.PAYPAL_SECRET;
       const paypalApiBase = IS_PAYPAL_SANDBOX ? secrets.PAYPAL_API_BASE_SANDBOX : secrets.PAYPAL_API_BASE;
@@ -1031,10 +1022,8 @@ exports.processTokenPurchase = onCall<ProcessTokenPurchaseData, Promise<ProcessT
     }
 
     try {
-      // Get secrets from Secret Manager
       const secrets = await getSecretsConfig();
       
-      // Use sandbox or production credentials based on environment
       const clientId = IS_PAYPAL_SANDBOX ? secrets.PAYPAL_CLIENT_ID_SANDBOX : secrets.PAYPAL_CLIENT_ID;
       const secret = IS_PAYPAL_SANDBOX ? secrets.PAYPAL_SECRET_SANDBOX : secrets.PAYPAL_SECRET;
       const paypalApiBase = IS_PAYPAL_SANDBOX ? secrets.PAYPAL_API_BASE_SANDBOX : secrets.PAYPAL_API_BASE;
@@ -1162,10 +1151,8 @@ exports.createTipOrder = onCall<CreateTipOrderData, Promise<CreateTipOrderRespon
   if (parseFloat(amount) < 1.0) throw new HttpsError("invalid-argument", "Minimum tip amount is $1.00.");
 
   try {
-    // Get secrets from Secret Manager
     const secrets = await getSecretsConfig();
     
-    // Use sandbox or production credentials based on environment
     const clientId = IS_PAYPAL_SANDBOX ? secrets.PAYPAL_CLIENT_ID_SANDBOX : secrets.PAYPAL_CLIENT_ID;
     const secret = IS_PAYPAL_SANDBOX ? secrets.PAYPAL_SECRET_SANDBOX : secrets.PAYPAL_SECRET;
     const paypalApiBase = IS_PAYPAL_SANDBOX ? secrets.PAYPAL_API_BASE_SANDBOX : secrets.PAYPAL_API_BASE;
@@ -1232,10 +1219,8 @@ exports.processTip = onCall<ProcessTipData, Promise<ProcessTipResponse>>(async (
   if (parseFloat(amount) < 1.0) throw new HttpsError("invalid-argument", "Minimum tip amount is $1.00.");
 
   try {
-    // Get secrets from Secret Manager
     const secrets = await getSecretsConfig();
     
-    // Use sandbox or production credentials based on environment
     const clientId = IS_PAYPAL_SANDBOX ? secrets.PAYPAL_CLIENT_ID_SANDBOX : secrets.PAYPAL_CLIENT_ID;
     const secret = IS_PAYPAL_SANDBOX ? secrets.PAYPAL_SECRET_SANDBOX : secrets.PAYPAL_SECRET;
     const paypalApiBase = IS_PAYPAL_SANDBOX ? secrets.PAYPAL_API_BASE_SANDBOX : secrets.PAYPAL_API_BASE;
@@ -1254,7 +1239,6 @@ exports.processTip = onCall<ProcessTipData, Promise<ProcessTipResponse>>(async (
     const accessToken = authData.access_token;
     if (!accessToken) throw new HttpsError("internal", "No access token in response.");
 
-    // Fetch order details for validation
     const orderDetailsResponse = await fetch(`${paypalApiBase}/v2/checkout/orders/${orderId}`, {
       method: "GET",
       headers: {
@@ -1423,7 +1407,6 @@ exports.processTokenTrade = onCall<ProcessTokenTradeData, Promise<ProcessTokenTr
   }
 );
 
-// Updated processSubscription with auto-renew and differential limits
 exports.processSubscription = onCall<ProcessSubscriptionData, Promise<ProcessSubscriptionResponse>>(
   async (request) => {
     const { userId, planId, billingPeriod, duration, autoRenew = true } = request.data;
@@ -1711,8 +1694,6 @@ exports.toggleAutoRenew = onCall(async (request) => {
   }
 });
 
-
-// Updated checkSubscriptionStatus (remove downgrade logic)
 exports.checkSubscriptionStatus = onCall<CheckSubscriptionStatusData, Promise<CheckSubscriptionStatusResponse>>(
   async (request) => {
     const { userId } = request.data;
@@ -1723,7 +1704,6 @@ exports.checkSubscriptionStatus = onCall<CheckSubscriptionStatusData, Promise<Ch
     }
 
     try {
-      // Get user data
       const userDoc = await admin.firestore().doc(`users/${userId}`).get();
       if (!userDoc.exists) {
         throw new HttpsError("not-found", "User not found in Firestore.");
@@ -1856,8 +1836,6 @@ exports.checkUsername = onCall<CheckUsernameData>(async (request) => {
   }
 });
 
-
-// Then add the Cloud Function
 exports.verifySignup = onCall<VerifySignupData, Promise<VerifySignupResponse>>(
   async (request) => {
     const { email, turnstileToken } = request.data;
@@ -2098,7 +2076,6 @@ exports.getJellyseerrQuotas = onCall<GetJellyseerrQuotasData, Promise<GetJellyse
         };
       }
 
-      // Get secrets
       const secrets = await getSecretsConfig();
       const JELLYSEERR_API_KEY = secrets.JELLYSEERR_API_KEY;
 

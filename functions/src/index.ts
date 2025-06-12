@@ -1,10 +1,13 @@
+import { getAllSecrets } from './secrets';
 import { onCall, HttpsError } from "firebase-functions/v2/https";
 import { onSchedule } from "firebase-functions/v2/scheduler";
 import * as admin from "firebase-admin";
 import * as fs from "fs";
 import * as path from "path";
 import * as os from "os";
-import { getAllSecrets } from './secrets';
+import * as speakeasy from 'speakeasy';
+import * as QRCode from 'qrcode';
+import * as bcrypt from 'bcryptjs';
 
 // Initialize Firebase Admin SDK
 if (!admin.apps.length) {

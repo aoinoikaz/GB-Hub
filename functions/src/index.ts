@@ -7,7 +7,7 @@ import * as path from "path";
 import * as os from "os";
 import * as speakeasy from 'speakeasy';
 import * as QRCode from 'qrcode';
-import * as bcrypt from 'bcryptjs';
+//import * as bcrypt from 'bcryptjs';
 
 // Initialize Firebase Admin SDK
 if (!admin.apps.length) {
@@ -65,6 +65,13 @@ interface VerifySignupData {
 interface VerifySignupResponse {
   success: boolean;
   message?: string;
+}
+
+
+interface Initiate2FAResponse {
+  secret: string;
+  qrCodeUrl: string;
+  manualEntryKey: string;
 }
 
 interface UploadProfileImageData {
@@ -2378,3 +2385,48 @@ exports.processAutoRenewals = onSchedule("every day 00:00", async (event) => {
     throw error;
   }
 });
+
+
+// Cloud Function to start 2FA setup
+exports.initiate2FA = onCall<void, Promise<Initiate2FAResponse>>(
+  async (request) => {
+    const auth = request.auth;
+    if (!auth) {
+      throw new HttpsError("unauthenticated", "Must be logged in to enable 2FA");
+    }
+
+    const userId = auth.uid;
+    
+    // Check if user already has 2FA enabled
+    const userDoc = await admin.firestore().doc(`users/${userId}`).get();
+    if (!userDoc.exists) {
+      throw new HttpsError("not-found", "User not found");
+    }
+    
+    const userData = userDoc.data();
+    if (!userData) {
+      throw new HttpsError("internal", "User data is missing");
+    }
+    
+    if (userData.twoFactorEnabled) {
+      throw new HttpsError("already-exists", "2FA is already enabled");
+    }
+
+    // Generate secret
+    const secret = speakeasy.generateSecret({
+      name: `Gondola Bros (${userData.email || userData.username})`,
+      issuer: 'Gondola Bros',
+      length: 32
+    });
+
+    // Generate QR code
+    const qrCodeUrl = await QRCode.toDataURL(secret.otpauth_url!);
+
+    // Return data (not saving yet - user needs to verify first)
+    return {
+      secret: secret.base32,
+      qrCodeUrl,
+      manualEntryKey: secret.base32
+    };
+  }
+);

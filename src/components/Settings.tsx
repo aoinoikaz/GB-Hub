@@ -1,15 +1,16 @@
-import { Sun, Moon, Camera, User, Bell, Link, Trash, Download, Shield, Globe, Envelope, Megaphone } from "phosphor-react";
+import { Sun, Moon, Camera, User, Bell, Link, Trash, Download, Shield, Globe, Envelope, Megaphone, Spinner } from "phosphor-react";
 import { useTheme } from "../context/theme-context";
 import { useState, useEffect, useRef } from "react";
 import { getFirestore, doc, getDoc } from "firebase/firestore";
 import { useAuth } from "../context/auth-context";
 import { getFunctions, httpsCallable } from "firebase/functions";
 import { app } from "../config/firebase";
-import { Spinner } from "phosphor-react";
+import { useNavigate } from "react-router-dom";
 
 const Settings = () => {
   const { theme, toggleTheme } = useTheme();
   const { user } = useAuth();
+  const navigate = useNavigate();
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
   const [profileImage, setProfileImage] = useState<string | null>(null);
@@ -22,6 +23,7 @@ const Settings = () => {
     updates: true,
     newsletter: false,
   });
+  const [is2FAEnabled, setIs2FAEnabled] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const firestore = getFirestore();
   const functions = getFunctions(app);
@@ -36,6 +38,7 @@ const Settings = () => {
         setProfileImage(data.profileImage || null);
         setUsername(data.username || "");
         setEmail(user.email || "");
+        setIs2FAEnabled(data.twoFactorEnabled || false);
       }
     } catch (error) {
       console.error("Failed to fetch profile data:", error);
@@ -301,21 +304,32 @@ const Settings = () => {
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
               <div className={`p-3 rounded-2xl ${
-                theme === "dark" ? "bg-green-500/20" : "bg-green-100"
+                is2FAEnabled 
+                  ? theme === "dark" ? "bg-green-500/20" : "bg-green-100"
+                  : theme === "dark" ? "bg-gray-700" : "bg-gray-200"
               }`}>
-                <Shield size={24} className="text-green-500" />
+                <Shield size={24} className={is2FAEnabled ? "text-green-500" : "text-gray-500"} />
               </div>
               <div>
                 <h3 className={`font-semibold ${theme === "dark" ? "text-white" : "text-gray-900"}`}>
                   2FA Security
                 </h3>
                 <p className={`text-sm ${theme === "dark" ? "text-gray-400" : "text-gray-600"}`}>
-                  Not enabled
+                  {is2FAEnabled ? "Enabled" : "Not enabled"}
                 </p>
               </div>
             </div>
-            <button className="px-4 py-2 bg-green-500/20 text-green-400 rounded-xl hover:bg-green-500/30 transition-all text-sm font-medium">
-              Enable
+            <button 
+              onClick={() => navigate('/settings/2fa')}
+              className={`px-4 py-2 rounded-xl hover:shadow-lg transition-all text-sm font-medium ${
+                is2FAEnabled
+                  ? theme === "dark"
+                    ? "bg-gray-700 hover:bg-gray-600 text-gray-300"
+                    : "bg-gray-200 hover:bg-gray-300 text-gray-700"
+                  : "bg-green-500/20 text-green-400 hover:bg-green-500/30"
+              }`}
+            >
+              {is2FAEnabled ? "Manage" : "Enable"}
             </button>
           </div>
         </div>

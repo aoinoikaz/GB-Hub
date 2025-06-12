@@ -2171,6 +2171,25 @@ exports.getJellyseerrQuotas = onCall<GetJellyseerrQuotasData, Promise<GetJellyse
 
       const requestsData = await requestsResponse.json();
       const requests = requestsData.results || [];
+
+      // Get active subscription to calculate actual days until reset
+      const activeSubQuery = admin
+        .firestore()
+        .collection("subscriptions")
+        .where("userId", "==", userId)
+        .where("status", "==", "active")
+        .orderBy("endDate", "desc")
+        .limit(1);
+
+      const activeSubSnapshot = await activeSubQuery.get();
+      let daysUntilReset = 0;
+
+      if (!activeSubSnapshot.empty) {
+        const subData = activeSubSnapshot.docs[0].data();
+        const subscriptionEndDate = subData.endDate.toDate();
+        const now = new Date();
+        daysUntilReset = Math.max(0, Math.ceil((subscriptionEndDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24)));
+      }
       
       // Count requests within quota period
       const now = new Date();
@@ -2196,11 +2215,11 @@ exports.getJellyseerrQuotas = onCall<GetJellyseerrQuotasData, Promise<GetJellyse
           movieLimit: movieQuotaLimit,
           movieUsed,
           movieRemaining: Math.max(0, movieQuotaLimit - movieUsed),
-          movieDaysToReset: movieQuotaDays,
+          movieDaysToReset: movieQuotaLimit > 0 ? daysUntilReset : 0,
           tvLimit: tvQuotaLimit,
           tvUsed,
           tvRemaining: Math.max(0, tvQuotaLimit - tvUsed),
-          tvDaysToReset: tvQuotaDays,
+          tvDaysToReset: tvQuotaLimit > 0 ? daysUntilReset : 0,
         },
       };
 

@@ -2213,6 +2213,7 @@ exports.getJellyseerrQuotas = onCall<GetJellyseerrQuotasData, Promise<GetJellyse
   }
 );
 
+
 // Scheduled function to process auto-renewals daily at midnight
 exports.processAutoRenewals = onSchedule("every day 00:00", async (event) => {
   console.log("Starting auto-renewal processing...");
@@ -2249,16 +2250,17 @@ exports.processAutoRenewals = onSchedule("every day 00:00", async (event) => {
         const renewalCost = plan.monthly;
         
         if (tokenBalance >= renewalCost) {
+
+          // Create new subscription
+          const newEndDate = new Date(subData.endDate.toDate());
+          newEndDate.setMonth(newEndDate.getMonth() + 1);
+
           // Process renewal
           await admin.firestore().runTransaction(async (transaction) => {
             // Deduct tokens
             transaction.update(userDoc.ref, {
               tokenBalance: admin.firestore.FieldValue.increment(-renewalCost),
             });
-            
-            // Create new subscription
-            const newEndDate = new Date(subData.endDate.toDate());
-            newEndDate.setMonth(newEndDate.getMonth() + 1);
             
             const newSubRef = admin.firestore().collection("subscriptions").doc();
             transaction.set(newSubRef, {
@@ -2297,6 +2299,18 @@ exports.processAutoRenewals = onSchedule("every day 00:00", async (event) => {
           });
           
           console.log(`Auto-renewed subscription for user ${subData.userId}`);
+
+          // Update Jellyseerr with new end date
+          const embyUserId = userData?.services?.emby?.serviceUserId;
+          if (embyUserId) {
+            await updateJellyseerrRequestLimits(
+              userData.email || "",
+              subData.planId,
+              embyUserId,
+              undefined,
+              newEndDate
+            );
+          }
         } else {
           // Insufficient tokens - disable auto-renew
           await doc.ref.update({

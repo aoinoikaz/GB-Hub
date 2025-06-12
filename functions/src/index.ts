@@ -2299,7 +2299,7 @@ exports.processAutoRenewals = onSchedule("every day 00:00", async (event) => {
           
           console.log(`Auto-renewed subscription for user ${subData.userId}`);
 
-          // Update Jellyseerr with new end date. Pass in undefined for limits becauase
+          // Update Jellyseerr with new end date. Pass in undefined for limits because
           // this is a renewal to the same plan, so they remain unchanged.
           const embyUserId = userData?.services?.emby?.serviceUserId;
           if (embyUserId) {

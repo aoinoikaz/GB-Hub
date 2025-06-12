@@ -730,7 +730,6 @@ async function updateEmbySubscriptionPermissions(embyUserId: string, planId: str
   if (!updateResponse.ok) {
     throw new Error(`Failed to update Emby user policy: ${updateResponse.status}`);
   }
-  
   console.log(`Successfully updated Emby permissions for user ${embyUserId} with plan ${planId}`);
 }
 

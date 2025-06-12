@@ -1,7 +1,13 @@
-import { getAllSecrets } from './secrets';
+import * as admin from "firebase-admin";
+
+if (!admin.apps.length) {
+  admin.initializeApp({
+    storageBucket: "gondola-bros-hub.firebasestorage.app",
+  });
+}
+
 import { onCall, HttpsError } from "firebase-functions/v2/https";
 import { onSchedule } from "firebase-functions/v2/scheduler";
-import * as admin from "firebase-admin";
 import * as fs from "fs";
 import * as path from "path";
 import * as os from "os";
@@ -9,12 +15,8 @@ import * as speakeasy from 'speakeasy';
 import * as QRCode from 'qrcode';
 //import * as bcrypt from 'bcryptjs';
 
-const IS_PAYPAL_SANDBOX = process.env.PAYPAL_SANDBOX === 'true';
-const BUCKET = admin.storage().bucket();
-const EMBY_BASE_URL: string = "https://media.gondolabros.com";
-const JELLYSEERR_URL = "https://request-media.gondolabros.com"
+import { getAllSecrets } from './secrets';
 
-// Initialize secrets
 let secretsConfig: {
   EMBY_API_KEY: string;
   PAYPAL_CLIENT_ID: string;
@@ -27,19 +29,17 @@ let secretsConfig: {
   TURNSTILE_SECRET_KEY: string;
 } | null = null;
 
-
-if (!admin.apps.length) {
-  admin.initializeApp({
-    storageBucket: "gondola-bros-hub.firebasestorage.app",
-  });
-}
-
 async function getSecretsConfig() {
   if (!secretsConfig) {
     secretsConfig = await getAllSecrets();
   }
   return secretsConfig;
 }
+
+const IS_PAYPAL_SANDBOX = process.env.PAYPAL_SANDBOX === 'true';
+const BUCKET = admin.storage().bucket();
+const EMBY_BASE_URL: string = "https://media.gondolabros.com";
+const JELLYSEERR_URL = "https://request-media.gondolabros.com"
 
 const VALID_MAGIC_BYTES: { [key: string]: number[] } = {
   "image/png": [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a],

@@ -2383,8 +2383,6 @@ exports.processAutoRenewals = onSchedule("every day 00:00", async (event) => {
   }
 });
 
-
-// Cloud Function to start 2FA setup
 exports.initiate2FA = onCall<void, Promise<Initiate2FAResponse>>(
   async (request) => {
     const auth = request.auth;

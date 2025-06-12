@@ -2251,7 +2251,6 @@ exports.processAutoRenewals = onSchedule("every day 00:00", async (event) => {
         
         if (tokenBalance >= renewalCost) {
 
-          // Create new subscription
           const newEndDate = new Date(subData.endDate.toDate());
           newEndDate.setMonth(newEndDate.getMonth() + 1);
 

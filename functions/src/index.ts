@@ -8,6 +8,7 @@ if (!admin.apps.length) {
 
 import { onCall, HttpsError } from "firebase-functions/v2/https";
 import { onSchedule } from "firebase-functions/v2/scheduler";
+
 import * as fs from "fs";
 import * as path from "path";
 import * as os from "os";

@@ -734,12 +734,12 @@ async function updateEmbySubscriptionPermissions(embyUserId: string, planId: str
   console.log(`Successfully updated Emby permissions for user ${embyUserId} with plan ${planId}`);
 }
 
-
 async function updateJellyseerrRequestLimits(
   email: string, 
   planId: string, 
   embyUserId?: string,
-  customLimits?: { movieLimit: number; tvLimit: number }
+  customLimits?: { movieLimit: number; tvLimit: number },
+  subscriptionEndDate?: Date
 ): Promise<void> {
   const secrets = await getSecretsConfig();
   const JELLYSEERR_API_KEY = secrets.JELLYSEERR_API_KEY;
@@ -812,6 +812,13 @@ async function updateJellyseerrRequestLimits(
 
     const userDetails = await userDetailsResponse.json();
 
+    let quotaDays = 30;
+    if (subscriptionEndDate) {
+      const now = new Date();
+      const daysUntilEnd = Math.ceil((subscriptionEndDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+      quotaDays = Math.max(1, daysUntilEnd); // At least 1 day
+    }
+
     // MUST send FULL object (Fallenbagel's requirement)
     const updatePayload = {
       username: userDetails.username || null,
@@ -822,9 +829,9 @@ async function updateJellyseerrRequestLimits(
       streamingRegion: userDetails.settings?.streamingRegion || "",
       originalLanguage: userDetails.settings?.originalLanguage || null,
       movieQuotaLimit: limits.movieLimit,
-      movieQuotaDays: limits.movieLimit > 0 ? 30 : 0,
+      movieQuotaDays: limits.movieLimit > 0 ? quotaDays : 0,
       tvQuotaLimit: limits.tvLimit,
-      tvQuotaDays: limits.tvLimit > 0 ? 30 : 0,
+      tvQuotaDays: limits.tvLimit > 0 ? quotaDays : 0,
       watchlistSyncMovies: userDetails.settings?.watchlistSyncMovies || null,
       watchlistSyncTv: userDetails.settings?.watchlistSyncTv || null,
     };
@@ -1626,7 +1633,7 @@ exports.processSubscription = onCall<ProcessSubscriptionData, Promise<ProcessSub
         try {
           await updateEmbySubscriptionPermissions(result.embyUserId, planId);
           await syncJellyseerrUser(result.embyUserId);
-          await updateJellyseerrRequestLimits(result.email, planId, result.embyUserId);
+          await updateJellyseerrRequestLimits(result.email, planId, result.embyUserId, undefined, new Date(result.endDate));
           console.log(`Updated Jellyseerr with ${planId} plan limits`);
         } catch (error) {
           console.error("Failed to update services:", error);

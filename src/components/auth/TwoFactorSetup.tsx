@@ -61,24 +61,21 @@ const TwoFactorSetup = () => {
     setError(null);
 
     try {
-      // TODO: This is where we need the backend verify2FA function
-      // For now, using mock data to show the flow
-      console.log("Would call verify2FA with:", { secret: qrData.secret, token: verificationCode });
+      // Call verify2FA function with the secret and token
+      const verify2FA = httpsCallable(functions, "verify2FA");
+      const result = await verify2FA({
+        secret: qrData.secret,
+        token: verificationCode
+      });
       
-      // Mock backup codes for demonstration
-      const mockBackupCodes = [
-        "ABCD-1234-EFGH",
-        "IJKL-5678-MNOP",
-        "QRST-9012-UVWX",
-        "YZAB-3456-CDEF",
-        "GHIJ-7890-KLMN",
-        "OPQR-1357-STUV",
-        "WXYZ-2468-ABCD",
-        "EFGH-3691-IJKL"
-      ];
+      const data = result.data as { success: boolean; backupCodes?: string[] };
       
-      setBackupCodes(mockBackupCodes);
-      setStep('backup');
+      if (data.success && data.backupCodes) {
+        setBackupCodes(data.backupCodes);
+        setStep('backup');
+      } else {
+        throw new Error("Verification failed");
+      }
     } catch (error: any) {
       setError(error.message || "Invalid code. Please try again.");
     } finally {
@@ -264,9 +261,28 @@ const TwoFactorSetup = () => {
                   <p className={`text-sm mb-2 ${theme === "dark" ? "text-gray-400" : "text-gray-600"}`}>
                     Can't scan? Enter this code manually:
                   </p>
-                  <code className={`text-sm font-mono break-all ${theme === "dark" ? "text-white" : "text-gray-900"}`}>
-                    {qrData.manualEntryKey}
-                  </code>
+                  <div className="flex items-center gap-2">
+                    <code className={`flex-1 text-sm font-mono break-all ${theme === "dark" ? "text-white" : "text-gray-900"}`}>
+                      {qrData.manualEntryKey}
+                    </code>
+                    <button
+                      onClick={() => copyToClipboard(qrData.manualEntryKey)}
+                      className={`p-2 rounded-lg transition-all flex-shrink-0 ${
+                        copiedCode === qrData.manualEntryKey
+                          ? "bg-green-500/20 text-green-400"
+                          : theme === "dark"
+                            ? "bg-gray-700 hover:bg-gray-600 text-gray-300"
+                            : "bg-gray-200 hover:bg-gray-300 text-gray-700"
+                      }`}
+                      title="Copy to clipboard"
+                    >
+                      {copiedCode === qrData.manualEntryKey ? (
+                        <CheckCircle size={16} weight="fill" />
+                      ) : (
+                        <Copy size={16} />
+                      )}
+                    </button>
+                  </div>
                 </div>
               </div>
 

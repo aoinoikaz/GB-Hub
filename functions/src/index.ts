@@ -72,6 +72,16 @@ interface Initiate2FAResponse {
   manualEntryKey: string;
 }
 
+interface Verify2FAData {
+  secret: string;
+  token: string;
+}
+
+interface Verify2FAResponse {
+  success: boolean;
+  backupCodes?: string[];
+}
+
 interface UploadProfileImageData {
   fileName: string;
   contentType: string;
@@ -2443,5 +2453,159 @@ exports.initiate2FA = onCall<void, Promise<Initiate2FAResponse>>(
       qrCodeUrl,
       manualEntryKey: secret.base32
     };
+  }
+);
+
+exports.verify2FA = onCall<Verify2FAData, Promise<Verify2FAResponse>>(
+  async (request) => {
+    const auth = request.auth;
+    if (!auth) {
+      throw new HttpsError("unauthenticated", "Must be logged in to verify 2FA");
+    }
+
+    const { secret, token } = request.data;
+    if (!secret || !token) {
+      throw new HttpsError("invalid-argument", "Secret and token are required");
+    }
+
+    // Verify the token
+    const verified = speakeasy.totp.verify({
+      secret,
+      encoding: 'base32',
+      token,
+      window: 2 // Allow some time drift
+    });
+
+    if (!verified) {
+      throw new HttpsError("invalid-argument", "Invalid verification code");
+    }
+
+    const userId = auth.uid;
+
+    try {
+      // Generate backup codes
+      const backupCodes: string[] = [];
+      const crypto = require('crypto');
+      
+      for (let i = 0; i < 8; i++) {
+        const code = crypto.randomBytes(4).toString('hex').toUpperCase();
+        const formattedCode = `${code.slice(0, 4)}-${code.slice(4)}`;
+        backupCodes.push(formattedCode);
+      }
+
+      // Hash backup codes before storing
+      const hashedBackupCodes = backupCodes.map(code => 
+        crypto.createHash('sha256').update(code).digest('hex')
+      );
+
+      // Update user document with 2FA info
+      await admin.firestore().doc(`users/${userId}`).update({
+        twoFactorEnabled: true,
+        twoFactorSecret: secret, // In production, encrypt this
+        twoFactorBackupCodes: hashedBackupCodes,
+        twoFactorEnabledAt: admin.firestore.FieldValue.serverTimestamp()
+      });
+
+      return {
+        success: true,
+        backupCodes
+      };
+    } catch (error) {
+      console.error("Error enabling 2FA:", error);
+      throw new HttpsError("internal", "Failed to enable 2FA");
+    }
+  }
+);
+
+exports.disable2FA = onCall<void, Promise<{ success: boolean }>>(
+  async (request) => {
+    const auth = request.auth;
+    if (!auth) {
+      throw new HttpsError("unauthenticated", "Must be logged in to disable 2FA");
+    }
+
+    const userId = auth.uid;
+
+    try {
+      // Remove 2FA fields from user document
+      await admin.firestore().doc(`users/${userId}`).update({
+        twoFactorEnabled: false,
+        twoFactorSecret: admin.firestore.FieldValue.delete(),
+        twoFactorBackupCodes: admin.firestore.FieldValue.delete(),
+        twoFactorEnabledAt: admin.firestore.FieldValue.delete()
+      });
+
+      return { success: true };
+    } catch (error) {
+      console.error("Error disabling 2FA:", error);
+      throw new HttpsError("internal", "Failed to disable 2FA");
+    }
+  }
+);
+
+// For login verification
+exports.verify2FALogin = onCall<{ token: string; backupCode?: string }, Promise<{ success: boolean }>>(
+  async (request) => {
+    const auth = request.auth;
+    if (!auth) {
+      throw new HttpsError("unauthenticated", "Must be logged in");
+    }
+
+    const { token, backupCode } = request.data;
+    if (!token && !backupCode) {
+      throw new HttpsError("invalid-argument", "Token or backup code is required");
+    }
+
+    const userId = auth.uid;
+
+    try {
+      // Get user's 2FA secret
+      const userDoc = await admin.firestore().doc(`users/${userId}`).get();
+      if (!userDoc.exists) {
+        throw new HttpsError("not-found", "User not found");
+      }
+
+      const userData = userDoc.data();
+      if (!userData?.twoFactorEnabled || !userData?.twoFactorSecret) {
+        throw new HttpsError("failed-precondition", "2FA is not enabled");
+      }
+
+      // If using token
+      if (token) {
+        const verified = speakeasy.totp.verify({
+          secret: userData.twoFactorSecret,
+          encoding: 'base32',
+          token,
+          window: 2
+        });
+
+        return { success: verified };
+      }
+
+      // If using backup code
+      if (backupCode && userData.twoFactorBackupCodes) {
+        const crypto = require('crypto');
+        const hashedInput = crypto.createHash('sha256').update(backupCode).digest('hex');
+        
+        const codeIndex = userData.twoFactorBackupCodes.indexOf(hashedInput);
+        if (codeIndex !== -1) {
+          // Remove used backup code
+          const updatedCodes = [...userData.twoFactorBackupCodes];
+          updatedCodes.splice(codeIndex, 1);
+          
+          await admin.firestore().doc(`users/${userId}`).update({
+            twoFactorBackupCodes: updatedCodes
+          });
+          
+          return { success: true };
+        }
+      }
+
+      return { success: false };
+    } catch (error) {
+      console.error("Error verifying 2FA login:", error);
+      if (error instanceof HttpsError) throw error;
+      throw new HttpsError("internal", "Failed to verify 2FA");
+    }
   }
 );

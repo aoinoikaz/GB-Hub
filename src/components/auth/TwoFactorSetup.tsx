@@ -1,3 +1,4 @@
+// src/components/auth/TwoFactorSetup.tsx
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useTheme } from "../../context/theme-context";
@@ -20,9 +21,15 @@ const TwoFactorSetup = () => {
   const [copiedCode, setCopiedCode] = useState<string | null>(null);
 
   useEffect(() => {
+    // Check if user is authenticated
+    if (!user) {
+      navigate('/auth');
+      return;
+    }
+    
     // Generate QR code on mount
     initiate2FA();
-  }, []);
+  }, [user, navigate]);
 
   const initiate2FA = async () => {
     setLoading(true);
@@ -45,14 +52,20 @@ const TwoFactorSetup = () => {
       return;
     }
 
+    if (!qrData) {
+      setError("No QR data available");
+      return;
+    }
+
     setLoading(true);
     setError(null);
 
     try {
-      // TODO: Call verify2FA function
-      console.log("Verifying code:", verificationCode);
+      // TODO: This is where we need the backend verify2FA function
+      // For now, using mock data to show the flow
+      console.log("Would call verify2FA with:", { secret: qrData.secret, token: verificationCode });
       
-      // Simulate success and backup codes
+      // Mock backup codes for demonstration
       const mockBackupCodes = [
         "ABCD-1234-EFGH",
         "IJKL-5678-MNOP",
@@ -86,6 +99,7 @@ const TwoFactorSetup = () => {
     setTimeout(() => setCopiedCode(null), 2000);
   };
 
+  // BACKUP CODES SCREEN
   if (step === 'backup') {
     return (
       <div className={`min-h-screen ${theme === "dark" ? "bg-gray-950" : "bg-gray-50"}`}>
@@ -173,6 +187,7 @@ const TwoFactorSetup = () => {
     );
   }
 
+  // SETUP SCREEN
   return (
     <div className={`min-h-screen ${theme === "dark" ? "bg-gray-950" : "bg-gray-50"}`}>
       <div className="p-6 md:p-8 max-w-2xl mx-auto">
@@ -222,7 +237,7 @@ const TwoFactorSetup = () => {
             </div>
           ) : qrData ? (
             <div className="space-y-8">
-              {/* Step 1 */}
+              {/* Step 1 - QR Code */}
               <div>
                 <div className="flex items-center gap-3 mb-4">
                   <div className="w-8 h-8 rounded-full bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center text-white font-semibold">
@@ -255,7 +270,7 @@ const TwoFactorSetup = () => {
                 </div>
               </div>
 
-              {/* Step 2 */}
+              {/* Step 2 - Verify */}
               <div>
                 <div className="flex items-center gap-3 mb-4">
                   <div className="w-8 h-8 rounded-full bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center text-white font-semibold">

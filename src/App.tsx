@@ -11,6 +11,7 @@ import ProtectedRoute from "./routes/ProtectedRoute";
 import Layout from "./components/Layout";
 import Tips from "./components/Tips";
 import Leaderboard from "./components/Leaderboard";
+import TwoFactorSetup from "./components/auth/TwoFactorSetup";
 
 const App = () => {
   
@@ -27,6 +28,7 @@ const App = () => {
         <Route element={<Layout><MediaDashboard /></Layout>} path="/media" />
         <Route element={<Layout><Store /></Layout>} path="/store" />
         <Route element={<Layout><Settings /></Layout>} path="/settings" />
+        <Route element={<Layout><TwoFactorSetup /></Layout>} path="/settings/2fa" />
         <Route element={<Layout><Leaderboard /></Layout>} path="/leaderboard" />
         
         {/* Tips doesn't use Layout (it's a special page) */}

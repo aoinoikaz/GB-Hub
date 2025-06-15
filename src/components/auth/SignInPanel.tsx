@@ -4,15 +4,24 @@ import { auth, db } from "../../config/firebase";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../../context/auth-context";
 import { doc, getDoc } from "firebase/firestore";
-import { Spinner } from "phosphor-react";
+import { getFunctions, httpsCallable } from "firebase/functions";
+import { Spinner, Shield } from "phosphor-react";
 
-const SignInPanel = ({ onSwap, onForgot, setCurrentPanel }: { onSwap: () => void; onForgot: () => void; setCurrentPanel: (panel: "signin" | "signup" | "forgot" | "setup", password?: string) => void }) => {
+const SignInPanel = ({ onSwap, onForgot, setCurrentPanel }: { 
+  onSwap: () => void; 
+  onForgot: () => void; 
+  setCurrentPanel: (panel: "signin" | "signup" | "forgot" | "setup", password?: string) => void 
+}) => {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [twoFactorCode, setTwoFactorCode] = useState("");
   const [error, setError] = useState("");
-  const [loading, setLoading] = useState(false); // Add loading state
+  const [loading, setLoading] = useState(false);
+  const [requires2FA, setRequires2FA] = useState(false);
+  const [tempUser, setTempUser] = useState<any>(null);
   const navigate = useNavigate();
   const { user, logout } = useAuth();
+  const functions = getFunctions();
 
   useEffect(() => {
     const checkFirstLogin = async () => {
@@ -27,54 +36,167 @@ const SignInPanel = ({ onSwap, onForgot, setCurrentPanel }: { onSwap: () => void
     };
     checkFirstLogin();
   }, [user, setCurrentPanel, password]);
-// In handleSignIn function, improve the email verification flow:
 
-const handleSignIn = async (e: React.FormEvent) => {
-  e.preventDefault();
-  setError("");
-  setLoading(true);
+  const handleSignIn = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError("");
+    setLoading(true);
 
-  try {
-    const userCredential = await signInWithEmailAndPassword(auth, email, password);
-    const firebaseUser = userCredential.user;
+    try {
+      const userCredential = await signInWithEmailAndPassword(auth, email, password);
+      const firebaseUser = userCredential.user;
 
-    // Check email verification
-    if (!firebaseUser.emailVerified) {
-      setError("Please verify your email before logging in. Check your inbox for the verification link.");
-      await logout(); // Use logout from context to ensure clean state
+      // Check email verification
+      if (!firebaseUser.emailVerified) {
+        setError("Please verify your email before logging in. Check your inbox for the verification link.");
+        await logout();
+        setLoading(false);
+        return;
+      }
+
+      // Check if user has 2FA enabled
+      const userDocRef = doc(db, "users", firebaseUser.uid);
+      const userDoc = await getDoc(userDocRef);
+      
+      if (userDoc.exists()) {
+        const userData = userDoc.data();
+        
+        // Check if 2FA is enabled
+        if (userData.twoFactorEnabled) {
+          // Store the user temporarily and show 2FA input
+          setTempUser(firebaseUser);
+          setRequires2FA(true);
+          setLoading(false);
+          return;
+        }
+        
+        // No 2FA, proceed with normal login
+        if (firebaseUser.displayName === "New User") {
+          console.log("First login detected, switching to setup");
+          setCurrentPanel("setup", password);
+        } else {
+          navigate("/dashboard");
+        }
+      } else {
+        // First login flow
+        if (firebaseUser.displayName === "New User") {
+          setCurrentPanel("setup", password);
+        } else {
+          navigate("/dashboard");
+        }
+      }
+    } catch (err: any) {
+      // Better error messages
+      if (err.code === 'auth/user-not-found') {
+        setError("No account found with this email.");
+      } else if (err.code === 'auth/wrong-password') {
+        setError("Incorrect password.");
+      } else if (err.code === 'auth/invalid-email') {
+        setError("Invalid email address.");
+      } else if (err.code === 'auth/too-many-requests') {
+        setError("Too many failed attempts. Please try again later.");
+      } else {
+        setError(err.message);
+      }
+    } finally {
       setLoading(false);
+    }
+  };
+
+  const handleVerify2FA = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    if (!twoFactorCode || twoFactorCode.length !== 6) {
+      setError("Please enter a 6-digit code");
       return;
     }
 
-    // Check if this is first login (needs setup)
-    const userDocRef = doc(db, "users", firebaseUser.uid);
-    const userDoc = await getDoc(userDocRef);
-    
-    if (!userDoc.exists() && firebaseUser.displayName === "New User") {
-      console.log("First login detected, switching to setup");
-      setCurrentPanel("setup", password);
-    } else {
-      // Normal login flow
-      navigate("/dashboard");
-    }
-  } catch (err: any) {
-    // Better error messages
-    if (err.code === 'auth/user-not-found') {
-      setError("No account found with this email.");
-    } else if (err.code === 'auth/wrong-password') {
-      setError("Incorrect password.");
-    } else if (err.code === 'auth/invalid-email') {
-      setError("Invalid email address.");
-    } else if (err.code === 'auth/too-many-requests') {
-      setError("Too many failed attempts. Please try again later.");
-    } else {
-      setError(err.message);
-    }
-  } finally {
-    setLoading(false);
-  }
-};
+    setLoading(true);
+    setError("");
 
+    try {
+      // Verify the 2FA code
+      const verify2FALogin = httpsCallable(functions, "verify2FALogin");
+      const result = await verify2FALogin({ token: twoFactorCode });
+      
+      if ((result.data as any).success) {
+        // 2FA verified successfully, proceed with login
+        if (tempUser.displayName === "New User") {
+          setCurrentPanel("setup", password);
+        } else {
+          navigate("/dashboard");
+        }
+      } else {
+        setError("Invalid authentication code. Please try again.");
+      }
+    } catch (err: any) {
+      setError("Failed to verify authentication code.");
+      console.error("2FA verification error:", err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // If 2FA is required, show 2FA input screen
+  if (requires2FA) {
+    return (
+      <>
+        <form onSubmit={handleVerify2FA}>
+          <div className="text-center mb-6">
+            <div className="inline-flex p-3 rounded-full bg-gradient-to-br from-purple-500 to-pink-500 mb-4">
+              <Shield size={32} className="text-white" />
+            </div>
+            <h3 className="text-xl font-semibold text-white mb-2">Two-Factor Authentication</h3>
+            <p className="text-gray-400 text-sm">Enter the 6-digit code from your authenticator app</p>
+          </div>
+
+          {error && <p className="text-red-500 text-sm mb-4 text-center">{error}</p>}
+
+          <div className="mb-6">
+            <input
+              type="text"
+              value={twoFactorCode}
+              onChange={(e) => setTwoFactorCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+              className="w-full px-4 py-4 border rounded-md bg-black/30 border-gray-500 text-white placeholder-gray-400 
+                         focus:ring-0 focus:outline-none focus:border-gray-600 text-center font-mono text-2xl tracking-[0.5em]"
+              placeholder="000000"
+              maxLength={6}
+              disabled={loading}
+              autoFocus
+            />
+          </div>
+
+          <button
+            type="submit"
+            className={`w-full py-2 px-4 bg-gradient-to-r from-purple-500 to-pink-500 text-white rounded-md transition ${
+              loading || twoFactorCode.length !== 6 ? "opacity-50 cursor-not-allowed" : "hover:opacity-90"
+            }`}
+            disabled={loading || twoFactorCode.length !== 6}
+          >
+            {loading ? <Spinner size={20} className="animate-spin mx-auto" /> : "Verify & Sign In"}
+          </button>
+
+          <div className="mt-4 text-center">
+            <button
+              type="button"
+              onClick={() => {
+                setRequires2FA(false);
+                setTwoFactorCode("");
+                setError("");
+                logout(); // Sign out the temp user
+              }}
+              className="text-sm text-gray-300 hover:text-white transition"
+              disabled={loading}
+            >
+              Back to login
+            </button>
+          </div>
+        </form>
+      </>
+    );
+  }
+
+  // Normal login form
   return (
     <>
       <form onSubmit={handleSignIn}>
@@ -89,7 +211,7 @@ const handleSignIn = async (e: React.FormEvent) => {
             className="w-full px-4 py-2 border rounded-md bg-black/30 border-gray-500 text-white placeholder-gray-400 
                        focus:ring-0 focus:outline-none focus:border-gray-600"
             placeholder="Enter your email"
-            disabled={loading} // Disable input while loading
+            disabled={loading}
           />
         </div>
 
@@ -103,7 +225,7 @@ const handleSignIn = async (e: React.FormEvent) => {
             className="w-full px-4 py-2 border rounded-md bg-black/30 border-gray-500 text-white placeholder-gray-400 
                        focus:ring-0 focus:outline-none focus:border-gray-600"
             placeholder="Enter your password"
-            disabled={loading} // Disable input while loading
+            disabled={loading}
           />
         </div>
 
@@ -111,8 +233,8 @@ const handleSignIn = async (e: React.FormEvent) => {
           type="submit"
           className={`w-full py-2 px-4 bg-gradient-to-r from-purple-500 to-pink-500 text-white rounded-md transition ${
             loading ? "opacity-90 cursor-not-allowed" : "hover:opacity-90"
-          }`} // Match the style from Auth.tsx and AuthAction.tsx
-          disabled={loading} // Disable button while loading
+          }`}
+          disabled={loading}
         >
           {loading ? <Spinner size={20} className="animate-spin mx-auto" /> : "Sign In"}
         </button>

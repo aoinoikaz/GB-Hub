@@ -106,8 +106,11 @@ const SignInPanel = ({ onSwap, onForgot, setCurrentPanel }: {
   const handleVerify2FA = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    if (!twoFactorCode || twoFactorCode.length !== 6) {
-      setError("Please enter a 6-digit code");
+    // Check if it's a backup code (format: XXXX-XXXX)
+    const isBackupCode = twoFactorCode.includes('-') && twoFactorCode.length === 9;
+    
+    if (!isBackupCode && (!twoFactorCode || twoFactorCode.length !== 6)) {
+      setError("Please enter a 6-digit code or backup code");
       return;
     }
 
@@ -117,7 +120,10 @@ const SignInPanel = ({ onSwap, onForgot, setCurrentPanel }: {
     try {
       // Verify the 2FA code
       const verify2FALogin = httpsCallable(functions, "verify2FALogin");
-      const result = await verify2FALogin({ token: twoFactorCode });
+      const result = await verify2FALogin({ 
+        token: isBackupCode ? undefined : twoFactorCode,
+        backupCode: isBackupCode ? twoFactorCode : undefined
+      });
       
       if ((result.data as any).success) {
         // 2FA verified successfully, proceed with login
@@ -152,26 +158,40 @@ const SignInPanel = ({ onSwap, onForgot, setCurrentPanel }: {
 
           {error && <p className="text-red-500 text-sm mb-4 text-center">{error}</p>}
 
-          <div className="mb-6">
+          <div className="mb-4">
             <input
               type="text"
               value={twoFactorCode}
-              onChange={(e) => setTwoFactorCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+              onChange={(e) => {
+                const value = e.target.value;
+                // Allow digits and hyphens for backup codes
+                if (value.includes('-')) {
+                  // Backup code format
+                  setTwoFactorCode(value.toUpperCase().slice(0, 9));
+                } else {
+                  // Regular TOTP format
+                  setTwoFactorCode(value.replace(/\D/g, '').slice(0, 6));
+                }
+              }}
               className="w-full px-4 py-4 border rounded-md bg-black/30 border-gray-500 text-white placeholder-gray-400 
                          focus:ring-0 focus:outline-none focus:border-gray-600 text-center font-mono text-2xl tracking-[0.5em]"
               placeholder="000000"
-              maxLength={6}
+              maxLength={9}
               disabled={loading}
               autoFocus
             />
           </div>
 
+          <p className="text-center text-xs text-gray-400 mb-6">
+            Or use a backup code (format: XXXX-XXXX)
+          </p>
+
           <button
             type="submit"
             className={`w-full py-2 px-4 bg-gradient-to-r from-purple-500 to-pink-500 text-white rounded-md transition ${
-              loading || twoFactorCode.length !== 6 ? "opacity-50 cursor-not-allowed" : "hover:opacity-90"
+              loading || (twoFactorCode.length !== 6 && twoFactorCode.length !== 9) ? "opacity-50 cursor-not-allowed" : "hover:opacity-90"
             }`}
-            disabled={loading || twoFactorCode.length !== 6}
+            disabled={loading || (twoFactorCode.length !== 6 && twoFactorCode.length !== 9)}
           >
             {loading ? <Spinner size={20} className="animate-spin mx-auto" /> : "Verify & Sign In"}
           </button>

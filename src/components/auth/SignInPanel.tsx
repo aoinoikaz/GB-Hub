@@ -19,6 +19,7 @@ const SignInPanel = ({ onSwap, onForgot, setCurrentPanel }: {
   const [loading, setLoading] = useState(false);
   const [requires2FA, setRequires2FA] = useState(false);
   const [tempUser, setTempUser] = useState<any>(null);
+  const [useBackupCode, setUseBackupCode] = useState(false);
   const navigate = useNavigate();
   const { user, logout } = useAuth();
   const functions = getFunctions();
@@ -106,12 +107,18 @@ const SignInPanel = ({ onSwap, onForgot, setCurrentPanel }: {
   const handleVerify2FA = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    // Check if it's a backup code (format: XXXX-XXXX)
-    const isBackupCode = twoFactorCode.includes('-') && twoFactorCode.length === 9;
-    
-    if (!isBackupCode && (!twoFactorCode || twoFactorCode.length !== 6)) {
-      setError("Please enter a 6-digit code or backup code");
-      return;
+    if (useBackupCode) {
+      // Backup code validation
+      if (!twoFactorCode || twoFactorCode.length !== 9 || !twoFactorCode.includes('-')) {
+        setError("Please enter a valid backup code (format: XXXX-XXXX)");
+        return;
+      }
+    } else {
+      // Regular TOTP validation
+      if (!twoFactorCode || twoFactorCode.length !== 6) {
+        setError("Please enter a 6-digit code");
+        return;
+      }
     }
 
     setLoading(true);
@@ -121,8 +128,8 @@ const SignInPanel = ({ onSwap, onForgot, setCurrentPanel }: {
       // Verify the 2FA code
       const verify2FALogin = httpsCallable(functions, "verify2FALogin");
       const result = await verify2FALogin({ 
-        token: isBackupCode ? undefined : twoFactorCode,
-        backupCode: isBackupCode ? twoFactorCode : undefined
+        token: useBackupCode ? undefined : twoFactorCode,
+        backupCode: useBackupCode ? twoFactorCode : undefined
       });
       
       if ((result.data as any).success) {
@@ -133,7 +140,7 @@ const SignInPanel = ({ onSwap, onForgot, setCurrentPanel }: {
           navigate("/dashboard");
         }
       } else {
-        setError("Invalid authentication code. Please try again.");
+        setError(useBackupCode ? "Invalid backup code" : "Invalid authentication code");
       }
     } catch (err: any) {
       setError("Failed to verify authentication code.");
@@ -153,7 +160,14 @@ const SignInPanel = ({ onSwap, onForgot, setCurrentPanel }: {
               <Shield size={32} className="text-white" />
             </div>
             <h3 className="text-xl font-semibold text-white mb-2">Two-Factor Authentication</h3>
-            <p className="text-gray-400 text-sm">Enter the 6-digit code from your authenticator app</p>
+            <p className="text-gray-400 text-sm">
+              {useBackupCode 
+                ? "Enter your backup code" 
+                : "Enter the 6-digit code from your authenticator app"
+              }
+            </p>
+            {/* Debug */}
+            <p className="text-xs text-gray-500">Mode: {useBackupCode ? "Backup Code" : "Authenticator"}</p>
           </div>
 
           {error && <p className="text-red-500 text-sm mb-4 text-center">{error}</p>}
@@ -164,34 +178,47 @@ const SignInPanel = ({ onSwap, onForgot, setCurrentPanel }: {
               value={twoFactorCode}
               onChange={(e) => {
                 const value = e.target.value;
-                // Allow digits and hyphens for backup codes
-                if (value.includes('-')) {
-                  // Backup code format
-                  setTwoFactorCode(value.toUpperCase().slice(0, 9));
+                if (useBackupCode) {
+                  // Backup code format - allow letters, numbers and hyphen
+                  const formatted = value.toUpperCase().slice(0, 9);
+                  setTwoFactorCode(formatted);
                 } else {
-                  // Regular TOTP format
+                  // Regular TOTP format - only digits
                   setTwoFactorCode(value.replace(/\D/g, '').slice(0, 6));
                 }
               }}
-              className="w-full px-4 py-4 border rounded-md bg-black/30 border-gray-500 text-white placeholder-gray-400 
-                         focus:ring-0 focus:outline-none focus:border-gray-600 text-center font-mono text-2xl tracking-[0.5em]"
-              placeholder="000000"
-              maxLength={9}
+              className={`w-full px-4 py-4 border rounded-md bg-black/30 text-white placeholder-gray-400 
+                         focus:ring-0 focus:outline-none focus:border-gray-600 text-center font-mono text-2xl tracking-[0.5em]
+                         ${useBackupCode ? 'border-purple-500' : 'border-gray-500'}`}
+              placeholder={useBackupCode ? "XXXX-XXXX" : "000000"}
+              maxLength={useBackupCode ? 9 : 6}
               disabled={loading}
               autoFocus
             />
           </div>
 
-          <p className="text-center text-xs text-gray-400 mb-6">
-            Or use a backup code (format: XXXX-XXXX)
-          </p>
+          <div className="text-center mb-6">
+            <button
+              type="button"
+              onClick={() => {
+                setUseBackupCode(!useBackupCode);
+                setTwoFactorCode("");
+                setUseBackupCode(false);
+                setError("");
+              }}
+              className="text-sm text-purple-400 hover:text-purple-300 transition"
+              disabled={loading}
+            >
+              {useBackupCode ? "Use authenticator app instead" : "Use backup code instead"}
+            </button>
+          </div>
 
           <button
             type="submit"
             className={`w-full py-2 px-4 bg-gradient-to-r from-purple-500 to-pink-500 text-white rounded-md transition ${
               loading || (twoFactorCode.length !== 6 && twoFactorCode.length !== 9) ? "opacity-50 cursor-not-allowed" : "hover:opacity-90"
             }`}
-            disabled={loading || (twoFactorCode.length !== 6 && twoFactorCode.length !== 9)}
+            disabled={loading || (useBackupCode ? twoFactorCode.length !== 9 : twoFactorCode.length !== 6)}
           >
             {loading ? <Spinner size={20} className="animate-spin mx-auto" /> : "Verify & Sign In"}
           </button>

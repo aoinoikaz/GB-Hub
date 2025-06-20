@@ -24,6 +24,7 @@ const TwoFactorSetup = () => {
 
   const [is2FAEnabled, setIs2FAEnabled] = useState(false);
   const [checkingStatus, setCheckingStatus] = useState(true);
+  const [confirmingDisable, setConfirmingDisable] = useState(false);
 
   useEffect(() => {
     // Check if user is authenticated
@@ -37,6 +38,8 @@ const TwoFactorSetup = () => {
   }, [user, navigate]);
 
   const checkStatus = async () => {
+    if (!user) return;
+    
     try {
       const userDoc = await getDoc(doc(db, "users", user.uid));
       if (userDoc.exists()) {
@@ -121,6 +124,22 @@ const TwoFactorSetup = () => {
     navigator.clipboard.writeText(allCodes);
     setCopiedCode('all');
     setTimeout(() => setCopiedCode(null), 2000);
+  };
+
+  const handleDisable2FA = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const disable2FA = httpsCallable(functions, "disable2FA");
+      await disable2FA();
+      setIs2FAEnabled(false);
+      navigate('/settings');
+    } catch (error: any) {
+      setError(error.message || "Failed to disable 2FA");
+    } finally {
+      setLoading(false);
+      setConfirmingDisable(false);
+    }
   };
 
   // BACKUP CODES SCREEN
@@ -313,21 +332,61 @@ const TwoFactorSetup = () => {
               </div>
             </div>
 
-            <button
-              onClick={() => {
-                if (confirm("Are you sure you want to disable 2FA? This will make your account less secure.")) {
-                  // TODO: Implement disable 2FA
-                  console.log("Disable 2FA");
-                }
-              }}
-              className={`w-full py-3 px-6 rounded-xl font-medium transition-all ${
-                theme === "dark"
-                  ? "bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/30"
-                  : "bg-red-50 hover:bg-red-100 text-red-600 border border-red-300"
-              }`}
-            >
-              Disable Two-Factor Authentication
-            </button>
+            {!confirmingDisable ? (
+              <button
+                onClick={() => setConfirmingDisable(true)}
+                disabled={loading}
+                className={`w-full py-3 px-6 rounded-xl font-medium transition-all ${
+                  loading
+                    ? "opacity-50 cursor-not-allowed"
+                    : ""
+                } ${
+                  theme === "dark"
+                    ? "bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/30"
+                    : "bg-red-50 hover:bg-red-100 text-red-600 border border-red-300"
+                }`}
+              >
+                Disable Two-Factor Authentication
+              </button>
+            ) : (
+              <div className={`p-6 rounded-2xl ${
+                theme === "dark" ? "bg-red-500/10 border border-red-500/30" : "bg-red-50 border border-red-200"
+              }`}>
+                <h3 className={`text-lg font-semibold mb-3 ${
+                  theme === "dark" ? "text-red-400" : "text-red-700"
+                }`}>
+                  Are you sure?
+                </h3>
+                <p className={`text-sm mb-4 ${
+                  theme === "dark" ? "text-red-300/80" : "text-red-600"
+                }`}>
+                  Disabling 2FA will make your account less secure. You'll need to set it up again if you want to re-enable it.
+                </p>
+                <div className="flex gap-3">
+                  <button
+                    onClick={() => setConfirmingDisable(false)}
+                    className={`flex-1 py-2 px-4 rounded-xl font-medium transition-all ${
+                      theme === "dark"
+                        ? "bg-gray-700 hover:bg-gray-600 text-white"
+                        : "bg-gray-200 hover:bg-gray-300 text-gray-900"
+                    }`}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={handleDisable2FA}
+                    disabled={loading}
+                    className={`flex-1 py-2 px-4 rounded-xl font-medium transition-all ${
+                      loading
+                        ? "bg-gray-500 text-gray-300 cursor-not-allowed"
+                        : "bg-gradient-to-r from-red-500 to-red-600 text-white hover:shadow-lg"
+                    }`}
+                  >
+                    {loading ? <Spinner size={20} className="animate-spin mx-auto" /> : "Yes, Disable"}
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         ) : (
           /* SETUP CARD - Original setup flow */

@@ -166,8 +166,6 @@ const SignInPanel = ({ onSwap, onForgot, setCurrentPanel }: {
                 : "Enter the 6-digit code from your authenticator app"
               }
             </p>
-            {/* Debug */}
-            <p className="text-xs text-gray-500">Mode: {useBackupCode ? "Backup Code" : "Authenticator"}</p>
           </div>
 
           {error && <p className="text-red-500 text-sm mb-4 text-center">{error}</p>}
@@ -203,7 +201,6 @@ const SignInPanel = ({ onSwap, onForgot, setCurrentPanel }: {
               onClick={() => {
                 setUseBackupCode(!useBackupCode);
                 setTwoFactorCode("");
-                setUseBackupCode(false);
                 setError("");
               }}
               className="text-sm text-purple-400 hover:text-purple-300 transition"

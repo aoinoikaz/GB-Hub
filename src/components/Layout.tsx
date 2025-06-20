@@ -1,5 +1,3 @@
-// src/components/Layout.tsx - COMPLETE UPDATED VERSION
-
 import { useState, useEffect } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useTheme } from "../context/theme-context";
@@ -166,17 +164,6 @@ const Layout = ({ children }: LayoutProps) => {
             GB
           </h1>
           <div className="flex items-center gap-3">
-            {/* Mobile Status Indicator - Dot Only */}
-            <a 
-              href="https://status.gondolabros.com/"
-              target="_blank"
-              rel="noopener noreferrer"
-              className={`p-2 rounded-lg ${
-                theme === "dark" ? "text-green-400" : "text-green-600"
-              }`}
-            >
-              <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
-            </a>
             <button className={`p-2 rounded-lg ${
               theme === "dark" ? "text-gray-400 hover:text-white" : "text-gray-600 hover:text-gray-900"
             }`}>

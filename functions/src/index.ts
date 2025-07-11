@@ -1741,7 +1741,7 @@ exports.checkSubscriptionStatus = onCall<CheckSubscriptionStatusData, Promise<Ch
       if (activeSubSnapshot.empty) {
         // No active subscription - disable services
         const embyService = userData?.services?.emby;
-        if (embyService?.linked && embyService?.serviceUserId) {
+        if (embyService?.serviceUserId) {
           try {
             await disableEmbyAccount(embyService.serviceUserId);
           } catch (error) {
@@ -1770,7 +1770,7 @@ exports.checkSubscriptionStatus = onCall<CheckSubscriptionStatusData, Promise<Ch
 
         // Disable services
         const embyService = userData?.services?.emby;
-        if (embyService?.linked && embyService?.serviceUserId) {
+        if (embyService?.serviceUserId) {
           try {
             await disableEmbyAccount(embyService.serviceUserId);
           } catch (error) {

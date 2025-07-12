@@ -164,6 +164,7 @@ const MediaDashboard = () => {
   const [autoRenewEnabled, setAutoRenewEnabled] = useState(true);
   const [togglingAutoRenew, setTogglingAutoRenew] = useState(false);
   const functions = getFunctions();
+  const [renewalInfo, setRenewalInfo] = useState<{type: 'success' | 'failed' | null; details?: any;}>(null);
 
   const [quotaData, setQuotaData] = useState<{
     movieLimit: number;
@@ -279,6 +280,49 @@ const MediaDashboard = () => {
     document.addEventListener('visibilitychange', handleVisibilityChange);
     return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
   }, [activeSubscription, isLinked, quotaLoading]);
+
+  // Check renewal status
+useEffect(() => {
+  const checkRenewalStatus = async () => {
+    if (!activeSubscription) {
+      setRenewalInfo(null);
+      return;
+    }
+    
+    // Check for successful renewal
+    if (activeSubscription.renewedTo) {
+      try {
+        const renewalDoc = await getDoc(doc(db, "subscriptions", activeSubscription.renewedTo));
+        if (renewalDoc.exists()) {
+          const renewalData = renewalDoc.data();
+          setRenewalInfo({
+            type: 'success',
+            details: {
+              startDate: renewalData.startDate.toDate(),
+              planId: renewalData.planId,
+              tokenCost: renewalData.tokenCost
+            }
+          });
+        }
+      } catch (error) {
+        console.error("Error fetching renewal:", error);
+      }
+    }
+    // Check for failed renewal
+    else if (!activeSubscription.autoRenew && activeSubscription.autoRenewFailReason === "insufficient_tokens") {
+      setRenewalInfo({
+        type: 'failed',
+        details: {
+          tokensNeeded: subscriptionPlans.find(p => p.id === activeSubscription.planId)?.monthlyTokens || 0
+        }
+      });
+    } else {
+      setRenewalInfo(null);
+    }
+  };
+  
+  checkRenewalStatus();
+}, [activeSubscription]);
 
   const calculateTokenCost = () => {
     if (!selectedPlan) return 0;
@@ -798,6 +842,64 @@ const MediaDashboard = () => {
                               )}
                             </div>
                           </div>
+
+                          {/* Renewal Status Messages */}
+                          {renewalInfo && activeSubscription && (
+                            <div className={`mb-6 p-4 rounded-2xl flex items-start gap-3 ${
+                              renewalInfo.type === 'success'
+                                ? theme === "dark"
+                                  ? "bg-green-500/10 border border-green-500/20"
+                                  : "bg-green-50 border border-green-200"
+                                : theme === "dark"
+                                  ? "bg-yellow-500/10 border border-yellow-500/20"
+                                  : "bg-yellow-50 border border-yellow-200"
+                            }`}>
+                              {renewalInfo.type === 'success' ? (
+                                <>
+                                  <CheckCircle size={24} weight="fill" className="text-green-400 flex-shrink-0 mt-0.5" />
+                                  <div className="flex-1">
+                                    <p className={`font-medium mb-1 ${
+                                      theme === "dark" ? "text-green-400" : "text-green-700"
+                                    }`}>
+                                      Renewal Processed Successfully!
+                                    </p>
+                                    <p className={`text-sm ${
+                                      theme === "dark" ? "text-gray-300" : "text-gray-600"
+                                    }`}>
+                                      {renewalInfo.details.tokenCost} tokens have been deducted. Your {renewalInfo.details.planId} plan will continue on{' '}
+                                      {renewalInfo.details.startDate.toLocaleDateString('en-US', { 
+                                        month: 'short', 
+                                        day: 'numeric',
+                                        year: 'numeric'
+                                      })}.
+                                    </p>
+                                  </div>
+                                </>
+                              ) : (
+                                <>
+                                  <Warning size={24} weight="fill" className="text-yellow-400 flex-shrink-0 mt-0.5" />
+                                  <div className="flex-1">
+                                    <p className={`font-medium mb-1 ${
+                                      theme === "dark" ? "text-yellow-400" : "text-yellow-700"
+                                    }`}>
+                                      Auto-Renewal Failed - Insufficient Tokens
+                                    </p>
+                                    <p className={`text-sm mb-3 ${
+                                      theme === "dark" ? "text-gray-300" : "text-gray-600"
+                                    }`}>
+                                      You need {renewalInfo.details.tokensNeeded} tokens to renew. Your subscription expires in {activeSubscription.daysRemaining} day{activeSubscription.daysRemaining !== 1 ? 's' : ''}.
+                                    </p>
+                                    <button
+                                      onClick={() => navigate("/store")}
+                                      className="px-4 py-2 bg-gradient-to-r from-yellow-500 to-orange-500 text-white rounded-lg text-sm font-medium hover:shadow-lg transition-all"
+                                    >
+                                      Add Tokens
+                                    </button>
+                                  </div>
+                                </>
+                              )}
+                            </div>
+                          )}
 
                           {/* Booster Packs Button */}
                           {!isCancelled && (

@@ -161,10 +161,9 @@ const MediaDashboard = () => {
   const [redeeming, setRedeeming] = useState(false);
   const [showBoosterPacks, setShowBoosterPacks] = useState(false);
   const [purchasingBooster, setPurchasingBooster] = useState<string | null>(null);
-  const [autoRenewEnabled, setAutoRenewEnabled] = useState(true);
+  const [autoRenewEnabled, setAutoRenewEnabled] = useState(false);
   const [togglingAutoRenew, setTogglingAutoRenew] = useState(false);
   const functions = getFunctions();
-  const [renewalInfo, setRenewalInfo] = useState<{type: 'success' | 'failed' | null; details?: any;}>(null);
 
   const [quotaData, setQuotaData] = useState<{
     movieLimit: number;
@@ -280,49 +279,6 @@ const MediaDashboard = () => {
     document.addEventListener('visibilitychange', handleVisibilityChange);
     return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
   }, [activeSubscription, isLinked, quotaLoading]);
-
-  // Check renewal status
-useEffect(() => {
-  const checkRenewalStatus = async () => {
-    if (!activeSubscription) {
-      setRenewalInfo(null);
-      return;
-    }
-    
-    // Check for successful renewal
-    if (activeSubscription.renewedTo) {
-      try {
-        const renewalDoc = await getDoc(doc(db, "subscriptions", activeSubscription.renewedTo));
-        if (renewalDoc.exists()) {
-          const renewalData = renewalDoc.data();
-          setRenewalInfo({
-            type: 'success',
-            details: {
-              startDate: renewalData.startDate.toDate(),
-              planId: renewalData.planId,
-              tokenCost: renewalData.tokenCost
-            }
-          });
-        }
-      } catch (error) {
-        console.error("Error fetching renewal:", error);
-      }
-    }
-    // Check for failed renewal
-    else if (!activeSubscription.autoRenew && activeSubscription.autoRenewFailReason === "insufficient_tokens") {
-      setRenewalInfo({
-        type: 'failed',
-        details: {
-          tokensNeeded: subscriptionPlans.find(p => p.id === activeSubscription.planId)?.monthlyTokens || 0
-        }
-      });
-    } else {
-      setRenewalInfo(null);
-    }
-  };
-  
-  checkRenewalStatus();
-}, [activeSubscription]);
 
   const calculateTokenCost = () => {
     if (!selectedPlan) return 0;
@@ -678,7 +634,9 @@ useEffect(() => {
                                 <div className={`p-2 rounded-lg ${
                                   activeSubscription.autoRenew 
                                     ? 'bg-green-500/20 text-green-400' 
-                                    : 'bg-yellow-500/20 text-yellow-400'
+                                    : tokenBalance < subscriptionPlans.find(p => p.id === currentPlan)?.monthlyTokens!
+                                      ? 'bg-red-500/20 text-red-400'
+                                      : 'bg-yellow-500/20 text-yellow-400'
                                 }`}>
                                   <CreditCard size={20} />
                                 </div>
@@ -693,26 +651,32 @@ useEffect(() => {
                                   }`}>
                                     {activeSubscription.autoRenew 
                                       ? 'Renews automatically' 
-                                      : 'Renew manually before expiry'
+                                      : tokenBalance < subscriptionPlans.find(p => p.id === currentPlan)?.monthlyTokens! 
+                                        ? `Need ${subscriptionPlans.find(p => p.id === currentPlan)?.monthlyTokens} tokens to enable`
+                                        : 'Renew manually before expiry'
                                     }
                                   </p>
                                 </div>
                               </div>
                               <button
                                 onClick={handleToggleAutoRenew}
-                                disabled={togglingAutoRenew}
+                                disabled={togglingAutoRenew || (!activeSubscription.autoRenew && tokenBalance < subscriptionPlans.find(p => p.id === currentPlan)?.monthlyTokens!)}
                                 className={`relative px-4 py-2 rounded-xl text-sm font-medium transition-all ${
                                   activeSubscription.autoRenew
                                     ? theme === "dark"
                                       ? "bg-gray-700 hover:bg-gray-600 text-gray-300"
                                       : "bg-gray-200 hover:bg-gray-300 text-gray-700"
-                                    : "bg-gradient-to-r from-green-500 to-emerald-500 hover:from-green-600 hover:to-emerald-600 text-white shadow-lg shadow-green-500/25"
+                                    : tokenBalance < subscriptionPlans.find(p => p.id === currentPlan)?.monthlyTokens!
+                                      ? theme === "dark"
+                                        ? "bg-gray-800 text-gray-500 cursor-not-allowed"
+                                        : "bg-gray-300 text-gray-500 cursor-not-allowed"
+                                      : "bg-gradient-to-r from-green-500 to-emerald-500 hover:from-green-600 hover:to-emerald-600 text-white shadow-lg shadow-green-500/25"
                                 } ${togglingAutoRenew ? "opacity-50 cursor-not-allowed" : ""}`}
                               >
                                 {togglingAutoRenew ? (
                                   <Spinner size={16} className="animate-spin" />
                                 ) : (
-                                  activeSubscription.autoRenew ? "Turn Off" : "Turn On"
+                                  activeSubscription.autoRenew ? "Turn Off" : tokenBalance < subscriptionPlans.find(p => p.id === currentPlan)?.monthlyTokens! ? "Insufficient Tokens" : "Turn On"
                                 )}
                               </button>
                             </div>
@@ -842,64 +806,6 @@ useEffect(() => {
                               )}
                             </div>
                           </div>
-
-                          {/* Renewal Status Messages */}
-                          {renewalInfo && activeSubscription && (
-                            <div className={`mb-6 p-4 rounded-2xl flex items-start gap-3 ${
-                              renewalInfo.type === 'success'
-                                ? theme === "dark"
-                                  ? "bg-green-500/10 border border-green-500/20"
-                                  : "bg-green-50 border border-green-200"
-                                : theme === "dark"
-                                  ? "bg-yellow-500/10 border border-yellow-500/20"
-                                  : "bg-yellow-50 border border-yellow-200"
-                            }`}>
-                              {renewalInfo.type === 'success' ? (
-                                <>
-                                  <CheckCircle size={24} weight="fill" className="text-green-400 flex-shrink-0 mt-0.5" />
-                                  <div className="flex-1">
-                                    <p className={`font-medium mb-1 ${
-                                      theme === "dark" ? "text-green-400" : "text-green-700"
-                                    }`}>
-                                      Renewal Processed Successfully!
-                                    </p>
-                                    <p className={`text-sm ${
-                                      theme === "dark" ? "text-gray-300" : "text-gray-600"
-                                    }`}>
-                                      {renewalInfo.details.tokenCost} tokens have been deducted. Your {renewalInfo.details.planId} plan will continue on{' '}
-                                      {renewalInfo.details.startDate.toLocaleDateString('en-US', { 
-                                        month: 'short', 
-                                        day: 'numeric',
-                                        year: 'numeric'
-                                      })}.
-                                    </p>
-                                  </div>
-                                </>
-                              ) : (
-                                <>
-                                  <Warning size={24} weight="fill" className="text-yellow-400 flex-shrink-0 mt-0.5" />
-                                  <div className="flex-1">
-                                    <p className={`font-medium mb-1 ${
-                                      theme === "dark" ? "text-yellow-400" : "text-yellow-700"
-                                    }`}>
-                                      Auto-Renewal Failed - Insufficient Tokens
-                                    </p>
-                                    <p className={`text-sm mb-3 ${
-                                      theme === "dark" ? "text-gray-300" : "text-gray-600"
-                                    }`}>
-                                      You need {renewalInfo.details.tokensNeeded} tokens to renew. Your subscription expires in {activeSubscription.daysRemaining} day{activeSubscription.daysRemaining !== 1 ? 's' : ''}.
-                                    </p>
-                                    <button
-                                      onClick={() => navigate("/store")}
-                                      className="px-4 py-2 bg-gradient-to-r from-yellow-500 to-orange-500 text-white rounded-lg text-sm font-medium hover:shadow-lg transition-all"
-                                    >
-                                      Add Tokens
-                                    </button>
-                                  </div>
-                                </>
-                              )}
-                            </div>
-                          )}
 
                           {/* Booster Packs Button */}
                           {!isCancelled && (
@@ -1262,9 +1168,13 @@ useEffect(() => {
                           <div className="flex items-center justify-between">
                             <div className="flex items-center gap-3">
                               <div className={`p-2 rounded-lg ${
-                                theme === "dark"
-                                  ? "bg-purple-500/20 text-purple-400"
-                                  : "bg-purple-100 text-purple-600"
+                                tokenBalance < (subscriptionPlans.find(p => p.id === selectedPlan)?.monthlyTokens! * 2)
+                                  ? theme === "dark"
+                                    ? "bg-red-500/20 text-red-400"
+                                    : "bg-red-100 text-red-600"
+                                  : theme === "dark"
+                                    ? "bg-purple-500/20 text-purple-400"
+                                    : "bg-purple-100 text-purple-600"
                               }`}>
                                 <CreditCard size={20} />
                               </div>
@@ -1275,19 +1185,25 @@ useEffect(() => {
                                 <p className={`text-sm ${
                                   theme === "dark" ? "text-gray-400" : "text-gray-600"
                                 }`}>
-                                  {autoRenewEnabled ? "Renews automatically" : "Manual renewal required"}
+                                  {tokenBalance < (subscriptionPlans.find(p => p.id === selectedPlan)?.monthlyTokens! * 2)
+                                    ? `Disabled - Need ${subscriptionPlans.find(p => p.id === selectedPlan)?.monthlyTokens} more tokens`
+                                    : autoRenewEnabled ? "Renews automatically" : "Manual renewal required"
+                                  }
                                 </p>
                               </div>
                             </div>
                             <button
                               onClick={() => setAutoRenewEnabled(!autoRenewEnabled)}
+                              disabled={tokenBalance < (subscriptionPlans.find(p => p.id === selectedPlan)?.monthlyTokens! * 2)}
                               className={`relative inline-flex h-7 w-12 items-center rounded-full transition-colors ${
-                                autoRenewEnabled ? 'bg-purple-500' : theme === "dark" ? 'bg-gray-600' : 'bg-gray-300'
+                                tokenBalance < (subscriptionPlans.find(p => p.id === selectedPlan)?.monthlyTokens! * 2)
+                                  ? theme === "dark" ? 'bg-gray-700 cursor-not-allowed' : 'bg-gray-400 cursor-not-allowed'
+                                  : autoRenewEnabled ? 'bg-purple-500' : theme === "dark" ? 'bg-gray-600' : 'bg-gray-300'
                               }`}
                             >
                               <span
                                 className={`inline-block h-5 w-5 transform rounded-full bg-white transition-transform shadow-lg ${
-                                  autoRenewEnabled ? 'translate-x-6' : 'translate-x-1'
+                                  autoRenewEnabled && tokenBalance >= (subscriptionPlans.find(p => p.id === selectedPlan)?.monthlyTokens! * 2) ? 'translate-x-6' : 'translate-x-1'
                                 }`}
                               />
                             </button>

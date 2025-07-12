@@ -757,7 +757,7 @@ const Store = () => {
             </h3>
           </div>
           <p className={`mb-6 ${theme === "dark" ? "text-gray-400" : "text-gray-600"}`}>
-            Win up to 600 tokens every month! Enter for your chance to win.
+            Win up to 60 tokens every month! Enter for your chance to win.
           </p>
           <button className="w-full py-3 px-6 bg-gradient-to-r from-purple-500 to-pink-500 text-white rounded-xl font-medium hover:shadow-lg hover:scale-105 transition-all">
             Enter Giveaway
@@ -779,7 +779,7 @@ const Store = () => {
             </h3>
           </div>
           <p className={`mb-4 ${theme === "dark" ? "text-gray-400" : "text-gray-600"}`}>
-            Earn 30 tokens for each friend who joins!
+            Earn 5 tokens for each friend who joins!
           </p>
           <div className={`flex items-center gap-2 p-3 rounded-lg ${
             theme === "dark" ? "bg-gray-800/50" : "bg-gray-100"
